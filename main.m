@@ -1,5 +1,5 @@
 function main()
-% MAIN: Single-pass sLORETA, but wave-by-wave CSV/screenshot without duplication.
+% screenshot sLORETA each wave: Single-pass sLORETA, but wave-by-wave CSV/sLORETA screenshot without duplication.
 %
 % LOGIC:
 %   1) Gather subjects via parseStrengthenPaths().
@@ -14,10 +14,6 @@ function main()
 %       - Then retrieve the separate sLORETA files from Brainstorm,
 %         and for wave #i => export CSV + screenshot from the i-th file.
 %   3) Next subject
-%
-% By retrieving each sLORETA result individually, we avoid the problem
-% where scoutExportCSV lumps all waves into one output file. Each wave
-% now has a single .csv + .png that references its own sLORETA result.
 
     % 1) Optional: Start diary log 
     timestampStr = datestr(now, 'yyyy-mm-dd_HHMMSS');
