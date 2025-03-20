@@ -1,5 +1,6 @@
-% screenshot noise cov matrix
 function screenshotAllNoiseCov(SubjectName, ConditionName, Modality, baseName)
+% SCREENSHOTALLNOISECOV  Takes snapshots of any noise cov for the given condition
+
     [sStudies, ~] = bst_get('StudyWithCondition', [SubjectName '/' ConditionName]);
     if isempty(sStudies) || isempty(sStudies(end).NoiseCov)
         disp('No noise covariance found for screenshot.');

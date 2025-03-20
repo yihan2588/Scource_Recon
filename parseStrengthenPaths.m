@@ -12,7 +12,7 @@ function subjects = parseStrengthenPaths(WorkingDir)
 %   subjects(i).Nights(j).NoiseEEGFile: single noise_eeg_data.set
 
     if nargin < 1 || isempty(WorkingDir)
-        WorkingDir = '/Users/wyh/0122';  % ** define your own default path (the main will prompt for input; will use this if empty)
+        WorkingDir = '/Users/wyh/0122';  % ** define your own default path (the main will prompt for input if empty)
     end
 
     %% 1) Find all "m2m_*" under Structural => each => one subject
@@ -47,8 +47,8 @@ function subjects = parseStrengthenPaths(WorkingDir)
             continue;
         end
 
-        %% 3) Find all "Night*" subfolders under that subject and then .set files
-        nightRoot = fullfile(subjGlob);
+        %% 3) Find all "Night*" subfolders under that subject
+        nightRoot = subjGlob;
         nightList = dir(fullfile(nightRoot, 'Night*'));
 
         if isempty(nightList)
@@ -114,5 +114,4 @@ function subjects = parseStrengthenPaths(WorkingDir)
             fprintf('     noise = %s\n', Ninfo.NoiseEEGFile);
         end
     end
-
 end
