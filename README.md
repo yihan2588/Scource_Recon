@@ -1,8 +1,8 @@
-# STRENGTHEN: EEG Source Reconstruction Pipeline
+# Source_Recon: EEG Source Reconstruction Pipeline
 
 ## Overview
 
-STRENGTHEN is a MATLAB-based pipeline for EEG source reconstruction using Brainstorm. It processes EEG data to identify the neural sources of brain activity, with a focus on slow wave analysis. The pipeline automates several steps including anatomy import, BEM surface generation, channel location correction, noise covariance computation, head model creation, and sLORETA source estimation.
+Source_Recon is a MATLAB-based pipeline for EEG source reconstruction using Brainstorm. It processes EEG data to identify the neural sources of brain activity, with a focus on slow wave analysis. The pipeline automates several steps including anatomy import, BEM surface generation, channel location correction, noise covariance computation, head model creation, and sLORETA source estimation.
 
 ## Dependencies
 
