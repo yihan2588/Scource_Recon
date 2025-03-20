@@ -8,14 +8,13 @@ Source_Recon is a MATLAB-based pipeline for EEG source reconstruction using Brai
 
 - **MATLAB**: Tested with MATLAB R2019b or newer
 - **Brainstorm**: An open-source application dedicated to MEG/EEG analysis ([Download Brainstorm](https://neuroimage.usc.edu/brainstorm/))
-- **EEGLAB**: For EEG data preprocessing (used for file formats)
 
 ## Directory Structure
 
 The pipeline expects the following directory structure:
 
 ```
-STRENGTHEN/
+Data Directory/
 ├── Assets/
 │   └── 256_net_temp.xyz       # EEG electrode template file (256 channels)
 ├── Structural/
