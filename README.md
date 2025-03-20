@@ -41,7 +41,7 @@ Data Directory/
 - `computeHeadModel.m`: Computes the forward model (head model)
 - `OverwriteChannel.m`: Overwrites channel locations with template coordinates
 - `runSLORETA.m`: Runs sLORETA source estimation
-- Various screenshot and export functions for results visualization
+- Various screenshot and export functions for results validation/visualization
 
 ## Setup and Installation
 
