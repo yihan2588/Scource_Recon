@@ -1,4 +1,8 @@
 function main()
+    % Get directory of this script
+    scriptDir = fileparts(mfilename('fullpath'));
+    % Add it (and subfolders, if any) to MATLAB path
+    addpath(scriptDir);
 % MAIN: Single-pass pipeline that imports noise, wave epochs, sets up noise cov,
 %       BEM/head model, then runs sLORETA for each subject-night separately.
 %
@@ -107,14 +111,24 @@ function main()
             disp(['   => Noise EEG imported => ', noiseEEGFile]);
 
             % (C) For each wave .set => import => condition=[NightName, '_NegPeak']
+            % Create a storage for mapping wave files to their imported results
+            waveFileMap = containers.Map();
+            
             for iFile = 1:numel(mainEEGFiles)
                 thisMain = mainEEGFiles{iFile};
                 [~, slowBase] = fileparts(thisMain);
 
                 fprintf('Night=%s, waveFile %d/%d: %s\n', ...
                     NightName, iFile, numel(mainEEGFiles), thisMain);
-                nImported = importMainEEG(SubjName, thisMain, NightName, [-0.05, 0.05]);
+                [nImported, importedFiles] = importMainEEG(SubjName, thisMain, NightName, [-0.05, 0.05]);
                 disp(['   => Imported [', num2str(nImported), '] epoch(s) as "', NightName,'_NegPeak".']);
+                
+                % Store mapping between imported files and original wave name
+                if nImported > 0 && ~isempty(importedFiles)
+                    for i = 1:numel(importedFiles)
+                        waveFileMap(importedFiles{i}) = slowBase;
+                    end
+                end
 
                 % Overwrite channel if we can find it:
                 negPeakChanFile = getNegPeakChannelFile(SubjName, [NightName,'_NegPeak']);
@@ -160,18 +174,52 @@ function main()
                     'includebad',    0, ...
                     'outprocesstab', 'process1');
 
+                % Create a mapping from result files to their corresponding data files
+                resDataMap = containers.Map();
+                for iRes = 1:numel(sResults)
+                    thisResFile = sResults(iRes).FileName;
+                    % Get the DataFile that this result is based on
+                    resInfo = in_bst_results(thisResFile, 0);
+                    if ~isempty(resInfo) && isfield(resInfo, 'DataFile') && ~isempty(resInfo.DataFile)
+                        resDataMap(thisResFile) = resInfo.DataFile;
+                    end
+                end
+                
                 for iRes = 1:numel(sResults)
                     thisResFile = sResults(iRes).FileName;
                     [~,resBase,~] = fileparts(thisResFile);
-                    % CSV => waveBase_scouts.csv
-                    outCsv = [resBase, '_scouts.csv'];
-                    scoutExportCSV_specificResult(thisResFile, outCsv);
-                    disp(['(Night) CSV => ', outCsv]);
+                    
+                    % Find original wave name for this result
+                    originalWaveName = '';
+                    if isKey(resDataMap, thisResFile)
+                        dataFile = resDataMap(thisResFile);
+                        % Find the original wave name from our mapping
+                        if isKey(waveFileMap, dataFile)
+                            originalWaveName = waveFileMap(dataFile);
+                        end
+                    end
+                    
+                    % If we found the original wave name, use it in the output filenames
+                    if ~isempty(originalWaveName)
+                        % CSV => originalWaveName_scouts.csv
+                        outCsv = [originalWaveName, '_scouts.csv'];
+                        scoutExportCSV_specificResult(thisResFile, outCsv);
+                        disp(['(Night) CSV => ', outCsv, ' (from wave: ', originalWaveName, ')']);
 
-                    % Screenshot => waveBase_Source.png
-                    wavePNG = [resBase, '_Source.png'];
-                    screenshotSourceColormap_specificResult(thisResFile, wavePNG);
-                    disp(['(Night) Screenshot => ', wavePNG]);
+                        % Screenshot => originalWaveName_Source.png
+                        wavePNG = [originalWaveName, '_Source.png'];
+                        screenshotSourceColormap_specificResult(thisResFile, wavePNG);
+                        disp(['(Night) Screenshot => ', wavePNG, ' (from wave: ', originalWaveName, ')']);
+                    else
+                        % Fallback to the original naming if mapping fails
+                        outCsv = [resBase, '_scouts.csv'];
+                        scoutExportCSV_specificResult(thisResFile, outCsv);
+                        disp(['(Night) CSV => ', outCsv, ' (no wave mapping found)']);
+
+                        wavePNG = [resBase, '_Source.png'];
+                        screenshotSourceColormap_specificResult(thisResFile, wavePNG);
+                        disp(['(Night) Screenshot => ', wavePNG, ' (no wave mapping found)']);
+                    end
                 end
                 disp(['(Night) Done wave-labeled CSV + PNG exports => ', NightName]);
 
