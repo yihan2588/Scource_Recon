@@ -66,18 +66,18 @@ function subjects = parseStrengthenPaths(WorkingDir)
             NightName = nightList(iNight).name;  % e.g. "Night1", "Night2"
             subjects(sCount).Nights(nCount).NightName = NightName;
 
-            % e.g. ".../Night1/Output/Slow_Wave/slow_waves/*.set"
+            % e.g. ".../Night1/Output/Slow_Wave/sw_data/*.set"
             slowWavesDir = fullfile(nightList(iNight).folder, NightName, ...
-                'Output', 'Slow_Wave', 'slow_waves');
+                'Output', 'Slow_Wave', 'sw_data');
 
             if ~exist(slowWavesDir, 'dir')
-                warning('No slow_waves folder: %s', slowWavesDir);
+                warning('No sw_data folder: %s', slowWavesDir);
                 subjects(sCount).Nights(nCount).MainEEGFiles = {};
                 subjects(sCount).Nights(nCount).NoiseEEGFile = '';
                 continue;
             end
 
-            % gather all .set in slow_waves
+            % gather all .set in sw_data
             swList = dir(fullfile(slowWavesDir, '*.set'));
             mainEEGPaths = cell(numel(swList), 1);
             for iFile = 1:numel(swList)

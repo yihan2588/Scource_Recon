@@ -43,7 +43,7 @@ function main()
 %       etc.
 
     % (1) Setup cumulative logging - Initial definition, path updated later
-    logName = 'pipeline_status.log';
+    logName = 'recon_run.log';
     logMessages = {}; % Initialize cell array for messages
 
     % Helper function to add message and write log
@@ -212,11 +212,11 @@ function main()
 
     % Define log file path using userDir AFTER it's determined
     if ~isempty(userDir) && exist(userDir, 'dir')
-        logName = fullfile(userDir, 'pipeline_status.log');
+        logName = fullfile(userDir, 'recon_run.log');
         addLog(sprintf('Logging to: %s', logName));
     else
         addLog('WARNING: STRENGTHEN directory not valid or not found. Logging to script directory.');
-        logName = fullfile(scriptDir, 'pipeline_status.log'); % Fallback
+        logName = fullfile(scriptDir, 'recon_run.log'); % Fallback
     end
 
 
