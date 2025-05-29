@@ -1,5 +1,5 @@
-function [nImported, importedFiles] = importMainEEG(SubjectName, MainEEGFile, NightName, EpochTime)
-% Import slow-wave EEG => condition = [NightName, '_NegPeak'].
+function [nImported, importedFiles] = importMainEEG(SubjectName, MainEEGFile, ConditionName, EpochTime)
+% Import slow-wave EEG => condition = ConditionName.
 % EventName = "NegPeak" is used for epoching, but 'createcond'=0 so we keep our condition name.
 %
 % OUTPUTS:
@@ -9,11 +9,10 @@ function [nImported, importedFiles] = importMainEEG(SubjectName, MainEEGFile, Ni
     if nargin<4
         EpochTime = [-0.05, 0.05];
     end
-    ConditionName = [NightName, '_NegPeak'];
 
     if isempty(MainEEGFile) || ~exist(MainEEGFile,'file')
         warning('MainEEG file not found: %s', MainEEGFile);
-        nImported=0; 
+        nImported=0;
         importedFiles = {};
         return;
     end

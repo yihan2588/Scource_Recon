@@ -27,19 +27,23 @@ function main()
 %       - Import Anatomy
 %       - For each selected Night:
 %           * Import the noise EEG => condition=NightX_noise
-%           * For each wave .set => import => condition=NightX_NegPeak, Overwrite channels
+%           * For each wave .set => import => condition=NightX_<stage>, Overwrite channels
 %           * Compute noise covariance using NightX_noise, Copy file, Reload study
-%           * Compute Head model (once per subject, first night), Capture path
-%           * Copy Head Model file if needed (for nights > 1), Reload study
-%           * run sLORETA specifically for “NightX_NegPeak” condition
-%           * Screenshot + CSV outputs
+%           * Compute Head model (once per subject, first stage condition), Capture path
+%           * Copy Head Model file if needed, Reload study
+%           * run sLORETA specifically for each “NightX_<stage>” condition
+%           * Screenshot + CSV outputs for each stage condition
 %
-% NOTE: Each night is its own condition. So you will see in Brainstorm:
+% NOTE: Each night will now have multiple conditions based on stage:
 %       Subject_001
 %         -> Night1_noise
-%         -> Night1_NegPeak
+%         -> Night1_pre-stim
+%         -> Night1_stim
+%         -> Night1_post-stim
 %         -> Night2_noise
-%         -> Night2_NegPeak
+%         -> Night2_pre-stim
+%         -> Night2_stim
+%         -> Night2_post-stim
 %       etc.
 
     % (1) Setup cumulative logging - Initial definition, path updated later
@@ -236,6 +240,9 @@ function main()
         SubjName = subjects(iSubj).SubjectName;
         AnatDir  = subjects(iSubj).AnatDir;
         capturedHeadModelFullPath = ''; % Initialize path for head model copying (using full path now)
+        didHeadModel = false; % Initialize for head model computation
+        firstStageCondForSubject = ''; % Capture the condition of the first file processed for HM
+
         addLog(sprintf('Starting Subject %d/%d: %s', subIdx, numel(selectedSubjects), SubjName));
 
         % Import anatomy for this subject
@@ -261,10 +268,6 @@ function main()
             % Decide whether to continue or skip subject based on BEM failure
             addLog('Continuing without BEM generation for now...'); % Or 'Skipping subject due to BEM error.' and continue;
         end
-
-        % We'll do only one head model per subject, referencing the "Night1_NegPeak"
-        % or we do "NightX_NegPeak" for the first night. Up to you, but we'll do it for the first night encountered.
-        didHeadModel = false;
 
         % For each selected night
         selectedNightsForSubj = selectedNights{iSubj};
@@ -318,18 +321,37 @@ function main()
                  % Decide whether to continue night processing
             end
 
-            % (C) For each wave .set => import => condition=[NightName, '_NegPeak']
+            % (C) For each wave .set => import => condition=[NightName, '_<stage>']
             waveFileMap = containers.Map(); % Create a storage for mapping wave files to their imported results
-            condPeak = [NightName, '_NegPeak']; % Define condition name once
+            processedStageConditions = {}; % Collect unique stage conditions processed this night
 
             for iFile = 1:numel(mainEEGFiles)
                 thisMain = mainEEGFiles{iFile};
                 [~, slowBase] = fileparts(thisMain);
                 addLog(sprintf('Processing waveFile %d/%d: %s', iFile, numel(mainEEGFiles), thisMain));
 
+                % Extract stage from filename (e.g., 'proto1_post-stim_sw1_E2' -> 'post-stim')
+                parts = strsplit(slowBase, '_');
+                if numel(parts) < 2
+                    addLog(sprintf('WARNING: Could not parse stage from filename: %s. Skipping.', slowBase));
+                    continue; % Skip this file
+                end
+                stage = parts{2};
+                condStage = [NightName '_' stage];
+
+                % Add to list of processed stage conditions if new
+                if ~ismember(condStage, processedStageConditions)
+                    processedStageConditions{end+1} = condStage; %#ok<AGROW>
+                end
+                % Capture first stage condition for head model computation
+                if isempty(firstStageCondForSubject)
+                    firstStageCondForSubject = condStage;
+                end
+
+
                 try
-                    [nImported, importedFiles] = importMainEEG(SubjName, thisMain, NightName, [-0.05, 0.05]);
-                    addLog(['   => Imported [', num2str(nImported), '] epoch(s) as "', condPeak, '".']);
+                    [nImported, importedFiles] = importMainEEG(SubjName, thisMain, condStage, [-0.05, 0.05]);
+                    addLog(['   => Imported [', num2str(nImported), '] epoch(s) as "', condStage, '".']);
 
                     % Store mapping between imported files and original wave name
                     if nImported > 0 && ~isempty(importedFiles)
@@ -345,7 +367,7 @@ function main()
 
                 % Overwrite channel if we can find it:
                 try
-                    negPeakChanFile = getNegPeakChannelFile(SubjName, condPeak);
+                    negPeakChanFile = getNegPeakChannelFile(SubjName, condStage);
                     if ~isempty(negPeakChanFile)
                         [nChUsed, ~] = OverwriteChannel(SubjName, negPeakChanFile, userDir);
                         addLog(['   => Overwrote channels => ', num2str(nChUsed), ' matched']);
@@ -358,6 +380,7 @@ function main()
             end % End mainEEGFiles loop
 
             % (D) Compute noise cov for this night => condition=[NightName,'_noise']
+            % This is done once per night, using the noise file.
             try
                 computeNoiseCov(SubjName, condNoise); % Use entire duration
                 addLog(['   => Noise cov computed => ', noiseEEGFile]);
@@ -366,231 +389,244 @@ function main()
                  % Decide whether to continue
             end
 
-            % Explicitly copy noisecov_full.mat and reload study (Copy + Reload Strategy)
-            try
-                % Get study info for noise condition AGAIN after computation
-                [sStudyNoise, iStudyNoise] = bst_get('StudyWithCondition', [SubjName '/' condNoise]);
-
-                % Check if NoiseCov structure and FileName exist
-                if ~isempty(sStudyNoise) && isfield(sStudyNoise, 'NoiseCov') && ~isempty(sStudyNoise.NoiseCov) && isfield(sStudyNoise.NoiseCov(1), 'FileName') && ~isempty(sStudyNoise.NoiseCov(1).FileName)
-
-                    sourceNoiseCovRelativePath = sStudyNoise.NoiseCov(1).FileName; % Get RELATIVE path from DB entry
-                    sourceNoiseCovFullPath = file_fullpath(sourceNoiseCovRelativePath); % Convert source to FULL path
-
-                    % Check if the source file actually exists on disk (using the FULL path)
-                    if ~isempty(sourceNoiseCovFullPath) && exist(sourceNoiseCovFullPath, 'file')
-                        % Get destination study info
-                        [sStudyPeak, iStudyPeak] = bst_get('StudyWithCondition', [SubjName '/' condPeak]);
-                        if ~isempty(sStudyPeak) && isfield(sStudyPeak, 'FileName') && ~isempty(sStudyPeak.FileName)
-                            % Get FULL path to destination study file, then get folder path
-                            destStudyFullPath = file_fullpath(sStudyPeak.FileName);
-                            destPeakFolderFullPath = fileparts(destStudyFullPath);
-                            destNoiseCovFullPath = fullfile(destPeakFolderFullPath, 'noisecov_full.mat');
-
-                            % Perform the copy using FULL source and destination paths
-                            copyfile(sourceNoiseCovFullPath, destNoiseCovFullPath);
-                            addLog(sprintf('   => Copied noisecov_full.mat from %s to %s', condNoise, condPeak));
-
-                            % Reload the destination study for Brainstorm to recognize the copied file
-                            db_reload_studies(iStudyPeak);
-                            addLog(sprintf('   => Reloaded study: %s', condPeak));
-                        else
-                            addLog(sprintf('WARNING: Could not find destination study %s to copy NoiseCov.', condPeak));
-                        end
-                    else
-                        addLog(sprintf('WARNING: Source noisecov_full.mat (%s / %s) reported by DB does not exist on disk or path invalid!', sourceNoiseCovRelativePath, sourceNoiseCovFullPath));
-                    end
-                else
-                    addLog(sprintf('WARNING: Could not find NoiseCov entry in database for %s after computation.', condNoise));
-                end
-            catch ME_copyReloadNoise
-                addLog(sprintf('ERROR copying/reloading noise cov for %s/%s: %s.', SubjName, NightName, ME_copyReloadNoise.message));
+            % (E) Head-model computed once per subject:
+            % This block needs to be moved here, outside the night loop, and use firstStageCondForSubject
+            if ~didHeadModel && ~isempty(firstStageCondForSubject)
+                 try
+                     [successHM, capturedHeadModelFullPath] = computeHeadModel(SubjName, firstStageCondForSubject, @addLog);
+                     if successHM
+                         addLog(['   => Head-model computed (once) for subject=', SubjName, ' using condition=', firstStageCondForSubject]);
+                         didHeadModel = true;
+                         if ~isempty(capturedHeadModelFullPath)
+                             addLog(sprintf('   => Captured head model full path: %s', capturedHeadModelFullPath));
+                         else
+                             addLog(sprintf('WARNING: Could not resolve full path for head model: %s', capturedHeadModelFullPath));
+                         end
+                     else
+                         addLog(sprintf('ERROR: Head-model computation failed for %s using condition=%s.', SubjName, firstStageCondForSubject));
+                     end
+                 catch ME_headModel
+                     addLog(sprintf('ERROR computing head model for %s: %s.', SubjName, ME_headModel.message));
+                     % Decide whether to continue
+                 end
             end
 
-            % (E) Head-model computed once per subject or per night. We'll do once per subject if not done.
-            if ~didHeadModel
+            % --- Operations that need to run for EACH stage condition processed this night ---
+            for iStageCond = 1:numel(processedStageConditions)
+                currentStageCond = processedStageConditions{iStageCond};
+                addLog(sprintf('Processing Stage Condition: %s', currentStageCond));
+
+                % Explicitly copy noisecov_full.mat and reload study (Copy + Reload Strategy)
                 try
-                    computeHeadModel(SubjName, condPeak);
-                    addLog(['   => Head-model computed (once) for condition=', condPeak]);
-                    didHeadModel = true;
-                    % Capture the FULL path of the computed head model for later copying
-                    sStudyPeak = bst_get('StudyWithCondition', [SubjName '/' condPeak]);
-                    if ~isempty(sStudyPeak) && isfield(sStudyPeak, 'HeadModel') && ~isempty(sStudyPeak.HeadModel) && isfield(sStudyPeak.HeadModel(1), 'FileName') && ~isempty(sStudyPeak.HeadModel(1).FileName)
-                        sourceHeadModelRelativePath = sStudyPeak.HeadModel(1).FileName;
-                        capturedHeadModelFullPath = file_fullpath(sourceHeadModelRelativePath); % Store the full path
-                        if ~isempty(capturedHeadModelFullPath)
-                            addLog(sprintf('   => Captured head model full path: %s', capturedHeadModelFullPath));
-                        else
-                            addLog(sprintf('WARNING: Could not resolve full path for head model: %s', sourceHeadModelRelativePath));
-                        end
-                    else
-                        addLog(sprintf('WARNING: Could not find HeadModel entry in database for %s to capture path.', condPeak));
-                    end
-                catch ME_headModel
-                    addLog(sprintf('ERROR computing head model for %s/%s: %s.', SubjName, NightName, ME_headModel.message));
-                    % Decide whether to continue
-                end
-            end
+                    % Get study info for noise condition
+                    [sStudyNoise, iStudyNoise] = bst_get('StudyWithCondition', [SubjName '/' condNoise]);
 
-            % Copy Head Model file before running sLORETA (if not the first night)
-            try
-                if didHeadModel && ~isempty(capturedHeadModelFullPath) && exist(capturedHeadModelFullPath, 'file')
-                    % Get current study info
-                    [sStudyPeak, iStudyPeak] = bst_get('StudyWithCondition', [SubjName '/' condPeak]);
-                    if ~isempty(sStudyPeak) && isfield(sStudyPeak, 'FileName') && ~isempty(sStudyPeak.FileName)
-                        % Get FULL path to destination study file, then get folder path
-                        destStudyFullPath = file_fullpath(sStudyPeak.FileName);
-                        destPeakFolderFullPath = fileparts(destStudyFullPath);
-                        targetHeadModelPath = fullfile(destPeakFolderFullPath, 'headmodel_surf_openmeeg.mat');
+                    % Check if NoiseCov structure and FileName exist
+                    if ~isempty(sStudyNoise) && isfield(sStudyNoise, 'NoiseCov') && ~isempty(sStudyNoise.NoiseCov) && isfield(sStudyNoise.NoiseCov(1), 'FileName') && ~isempty(sStudyNoise.NoiseCov(1).FileName)
 
-                        % Avoid copying onto itself (compare full paths)
-                        if ~strcmpi(capturedHeadModelFullPath, targetHeadModelPath) % Use strcmpi for case-insensitivity
-                            copyfile(capturedHeadModelFullPath, targetHeadModelPath);
-                            addLog(sprintf('   => Copied head model to %s', condPeak));
-                            % Reload the destination study
-                            db_reload_studies(iStudyPeak);
-                            addLog(sprintf('   => Reloaded study: %s', condPeak));
-                        end
-                    else
-                        addLog(sprintf('WARNING: Could not find study %s to copy head model into.', condPeak));
-                    end
-                elseif didHeadModel % Head model was computed but path is invalid
-                     addLog(sprintf('WARNING: Source head model path not valid or file not found (%s). Cannot copy head model for %s.', capturedHeadModelFullPath, condPeak));
-                end
-                % If didHeadModel is false, it means this is the first night, HM was just computed, no copy needed.
-            catch ME_copyReloadHM_preSLORETA
-                addLog(sprintf('ERROR copying/reloading head model for %s: %s', condPeak, ME_copyReloadHM_preSLORETA.message));
-            end
+                        sourceNoiseCovRelativePath = sStudyNoise.NoiseCov(1).FileName; % Get RELATIVE path from DB entry
+                        sourceNoiseCovFullPath = file_fullpath(sourceNoiseCovRelativePath); % Convert source to FULL path
 
-            % (F) Now run sLORETA for condition=[NightName,'_NegPeak']
-            try
-                runSLORETA(SubjName, condPeak);
-                addLog(['(Night) sLORETA done for subject=', SubjName, ' night=', NightName]);
-            catch ME_sloreta
-                 addLog(sprintf('ERROR running sLORETA for %s/%s: %s.', SubjName, NightName, ME_sloreta.message));
-                 % Decide whether to continue
-            end
+                        % Check if the source file actually exists on disk (using the FULL path)
+                        if ~isempty(sourceNoiseCovFullPath) && exist(sourceNoiseCovFullPath, 'file')
+                            % Get destination study info for the current stage condition
+                            [sStudyStage, iStudyStage] = bst_get('StudyWithCondition', [SubjName '/' currentStageCond]);
+                            if ~isempty(sStudyStage) && isfield(sStudyStage, 'FileName') && ~isempty(sStudyStage.FileName)
+                                % Get FULL path to destination study file, then get folder path
+                                destStudyFullPath = file_fullpath(sStudyStage.FileName);
+                                destStageFolderFullPath = fileparts(destStudyFullPath);
+                                destNoiseCovFullPath = fullfile(destStageFolderFullPath, 'noisecov_full.mat');
 
-            % (G) Save screenshots and export CSV for sLORETA results
-            addLog('(Night) Starting export of screenshots and CSV...');
-            oldDir = pwd;
-            try
-                if isempty(sourceReconDir) || ~exist(sourceReconDir, 'dir')
-                   error('SourceRecon directory is not valid, cannot save outputs.');
-                end
-                cd(sourceReconDir);
+                                % Perform the copy using FULL source and destination paths
+                                copyfile(sourceNoiseCovFullPath, destNoiseCovFullPath);
+                                addLog(sprintf('   => Copied noisecov_full.mat from %s to %s', condNoise, currentStageCond));
 
-                baseName = [SubjName,'_',NightName];  % For screenshot naming, e.g. "Subject_001_Night1"
-
-                % Screenshot channels + noise
-                try
-                    screenshotChannels3D_SubjCond(SubjName, condPeak, baseName);
-                    addLog('   => Channels screenshot saved.');
-                catch ME_scrChan
-                    addLog(sprintf('ERROR saving channel screenshot: %s', ME_scrChan.message));
-                end
-                try
-                    screenshotAllNoiseCov(SubjName, condPeak, 'EEG', baseName);
-                    addLog('   => Noise covariance screenshot saved.');
-                catch ME_scrNoise
-                    addLog(sprintf('ERROR saving noise cov screenshot: %s', ME_scrNoise.message));
-                end
-
-                % Retrieve sLORETA results for [NightName,'_NegPeak']
-                sResults = []; % Initialize
-                try
-                    sResults = bst_process('CallProcess', 'process_select_files_results', [], [], ...
-                        'subjectname',   SubjName, ...
-                        'condition',     condPeak, ...
-                        'tag',           'sLORETA', ...
-                        'includebad',    0, ...
-                        'outprocesstab', 'process1'); % Using process1 might be slow if many results
-                    if isempty(sResults)
-                        addLog('WARNING: No sLORETA results found to export.');
-                    end
-                catch ME_getResults
-                     addLog(sprintf('ERROR retrieving sLORETA results: %s', ME_getResults.message));
-                end
-
-                if ~isempty(sResults)
-                    % Create a mapping from result files to their corresponding data files
-                    resDataMap = containers.Map();
-                    try
-                        for iRes = 1:numel(sResults)
-                            thisResFile = sResults(iRes).FileName;
-                            resInfo = in_bst_results(thisResFile, 0);
-                            if ~isempty(resInfo) && isfield(resInfo, 'DataFile') && ~isempty(resInfo.DataFile)
-                                resDataMap(thisResFile) = resInfo.DataFile;
+                                % Reload the destination study for Brainstorm to recognize the copied file
+                                db_reload_studies(iStudyStage);
+                                addLog(sprintf('   => Reloaded study: %s', currentStageCond));
+                            else
+                                addLog(sprintf('WARNING: Could not find destination study %s to copy NoiseCov.', currentStageCond));
                             end
+                        else
+                            addLog(sprintf('WARNING: Source noisecov_full.mat (%s / %s) reported by DB does not exist on disk or path invalid!', sourceNoiseCovRelativePath, sourceNoiseCovFullPath));
                         end
-                    catch ME_map
-                         addLog(sprintf('ERROR mapping results to data files: %s', ME_map.message));
+                    else
+                        addLog(sprintf('WARNING: Could not find NoiseCov entry in database for %s after computation.', condNoise));
+                    end
+                catch ME_copyReloadNoise
+                    addLog(sprintf('ERROR copying/reloading noise cov for %s: %s.', currentStageCond, ME_copyReloadNoise.message));
+                end
+
+                % Copy Head Model file before running sLORETA
+                % This logic needs to check if the head model was computed (didHeadModel)
+                % and if the captured path is valid.
+                try
+                    if didHeadModel && ~isempty(capturedHeadModelFullPath) && exist(capturedHeadModelFullPath, 'file')
+                        % Get current study info for the current stage condition
+                        [sStudyStage, iStudyStage] = bst_get('StudyWithCondition', [SubjName '/' currentStageCond]);
+                        if ~isempty(sStudyStage) && isfield(sStudyStage, 'FileName') && ~isempty(sStudyStage.FileName)
+                            % Get FULL path to destination study file, then get folder path
+                            destStudyFullPath = file_fullpath(sStudyStage.FileName);
+                            destStageFolderFullPath = fileparts(destStudyFullPath);
+                            targetHeadModelPath = fullfile(destStageFolderFullPath, 'headmodel_surf_openmeeg.mat');
+
+                            % Avoid copying onto itself (compare full paths)
+                            if ~strcmpi(capturedHeadModelFullPath, targetHeadModelPath) % Use strcmpi for case-insensitivity
+                                copyfile(capturedHeadModelFullPath, targetHeadModelPath);
+                                addLog(sprintf('   => Copied head model from %s to %s', firstStageCondForSubject, currentStageCond));
+                                % Reload the destination study
+                                db_reload_studies(iStudyStage);
+                                addLog(sprintf('   => Reloaded study: %s', currentStageCond));
+                            end
+                        else
+                            addLog(sprintf('WARNING: Could not find study %s to copy head model into.', currentStageCond));
+                        end
+                    elseif didHeadModel % Head model was computed but path is invalid
+                         addLog(sprintf('WARNING: Source head model path not valid or file not found (%s). Cannot copy head model for %s.', capturedHeadModelFullPath, currentStageCond));
+                    else % Head model was not computed for this subject
+                         addLog(sprintf('WARNING: Head model was not computed for subject %s. Skipping head model copy for %s.', SubjName, currentStageCond));
+                    end
+                catch ME_copyReloadHM_preSLORETA
+                    addLog(sprintf('ERROR copying/reloading head model for %s: %s', currentStageCond, ME_copyReloadHM_preSLORETA.message));
+                end
+
+
+                % (F) Now run sLORETA for condition=currentStageCond
+                try
+                    runSLORETA(SubjName, currentStageCond);
+                    addLog(['(Night) sLORETA done for subject=', SubjName, ' condition=', currentStageCond]);
+                catch ME_sloreta
+                     addLog(sprintf('ERROR running sLORETA for %s/%s: %s.', SubjName, currentStageCond, ME_sloreta.message));
+                     % Decide whether to continue
+                end
+
+                % (G) Save screenshots and export CSV for sLORETA results
+                addLog('(Night) Starting export of screenshots and CSV...');
+                oldDir = pwd;
+                try
+                    if isempty(sourceReconDir) || ~exist(sourceReconDir, 'dir')
+                       error('SourceRecon directory is not valid, cannot save outputs.');
+                    end
+                    cd(sourceReconDir);
+
+                    % Need to get the stage name from currentStageCond for baseName
+                    stageParts = strsplit(currentStageCond, '_');
+                    if numel(stageParts) < 2
+                         stageForBaseName = 'unknownStage';
+                         addLog(sprintf('WARNING: Could not parse stage from condition name: %s', currentStageCond));
+                    else
+                         stageForBaseName = strjoin(stageParts(2:end), '_'); % Join parts after NightName
+                    end
+                    baseName = [SubjName,'_',NightName,'_',stageForBaseName];  % For screenshot naming
+
+                    % Screenshot channels + noise
+                    try
+                        screenshotChannels3D_SubjCond(SubjName, currentStageCond, baseName);
+                        addLog('   => Channels screenshot saved.');
+                    catch ME_scrChan
+                        addLog(sprintf('ERROR saving channel screenshot: %s', ME_scrChan.message));
+                    end
+                    try
+                        screenshotAllNoiseCov(SubjName, currentStageCond, 'EEG', baseName);
+                        addLog('   => Noise covariance screenshot saved.');
+                    catch ME_scrNoise
+                        addLog(sprintf('ERROR saving noise cov screenshot: %s', ME_scrNoise.message));
                     end
 
-                    for iRes = 1:numel(sResults)
-                        thisResFile = sResults(iRes).FileName;
-                        [~,resBase,~] = fileparts(thisResFile);
+                    % Retrieve sLORETA results for currentStageCond
+                    sResults = []; % Initialize
+                    try
+                        sResults = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+                        'subjectname',   SubjName, ...
+                            'condition',     currentStageCond, ...
+                            'tag',           'sLORETA', ...
+                            'includebad',    0, ...
+                            'outprocesstab', 'process1'); % Using process1 might be slow if many results
+                        if isempty(sResults)
+                            addLog(sprintf('WARNING: No sLORETA results found for condition %s to export.', currentStageCond));
+                        end
+                    catch ME_getResults
+                         addLog(sprintf('ERROR retrieving sLORETA results for %s: %s', currentStageCond, ME_getResults.message));
+                    end
 
-                        % Find original wave name for this result
-                        originalWaveName = '';
+                    if ~isempty(sResults)
+                        % Create a mapping from result files to their corresponding data files
+                        resDataMap = containers.Map();
                         try
-                            if isKey(resDataMap, thisResFile)
-                                dataFile = resDataMap(thisResFile);
-                                if isKey(waveFileMap, dataFile)
-                                    originalWaveName = waveFileMap(dataFile);
+                            for iRes = 1:numel(sResults)
+                                thisResFile = sResults(iRes).FileName;
+                                resInfo = in_bst_results(thisResFile, 0);
+                                if ~isempty(resInfo) && isfield(resInfo, 'DataFile') && ~isempty(resInfo.DataFile)
+                                    resDataMap(thisResFile) = resInfo.DataFile;
                                 end
                             end
-                        catch ME_findName
-                             addLog(sprintf('ERROR finding original wave name for %s: %s', resBase, ME_findName.message));
+                        catch ME_map
+                             addLog(sprintf('ERROR mapping results to data files for %s: %s', currentStageCond, ME_map.message));
                         end
 
-                        % If we found the original wave name, use it in the output filenames
-                        if ~isempty(originalWaveName)
-                            outCsv = [originalWaveName, '_scouts.csv'];
-                            wavePNG = [originalWaveName, '_Source.png'];
-                            try
-                                scoutExportCSV_specificResult(thisResFile, outCsv);
-                                addLog(['(Night) CSV => ', outCsv]);
-                            catch ME_csv
-                                addLog(sprintf('ERROR exporting CSV %s: %s', outCsv, ME_csv.message));
-                            end
-                            try
-                                screenshotSourceColormap_specificResult(thisResFile, wavePNG);
-                                addLog(['(Night) Screenshot => ', wavePNG]);
-                            catch ME_png
-                                addLog(sprintf('ERROR saving screenshot %s: %s', wavePNG, ME_png.message));
-                            end
-                        else
-                            % Fallback to the original naming if mapping fails
-                            outCsv = [resBase, '_scouts.csv'];
-                            wavePNG = [resBase, '_Source.png'];
-                             try
-                                scoutExportCSV_specificResult(thisResFile, outCsv);
-                                addLog(['(Night) CSV => ', outCsv, ' (no wave mapping found)']);
-                            catch ME_csv
-                                addLog(sprintf('ERROR exporting CSV %s: %s', outCsv, ME_csv.message));
-                            end
-                            try
-                                screenshotSourceColormap_specificResult(thisResFile, wavePNG);
-                                addLog(['(Night) Screenshot => ', wavePNG, ' (no wave mapping found)']);
-                            catch ME_png
-                                addLog(sprintf('ERROR saving screenshot %s: %s', wavePNG, ME_png.message));
-                            end
-                        end
-                    end % End export loop
-                    addLog(['(Night) Finished attempting CSV + PNG exports for => ', NightName]);
-                end % End if ~isempty(sResults)
+                        for iRes = 1:numel(sResults)
+                            thisResFile = sResults(iRes).FileName;
+                            [~,resBase,~] = fileparts(thisResFile);
 
-            catch ME_export
-                addLog(sprintf('ERROR during export section for night=%s: %s', NightName, ME_export.message));
-            end
-            cd(oldDir); % Change back directory regardless of errors in 'try' block
+                            % Find original wave name for this result
+                            originalWaveName = '';
+                            try
+                                if isKey(resDataMap, thisResFile)
+                                    dataFile = resDataMap(thisResFile); % Use the key from the map
+                                    if isKey(waveFileMap, dataFile)
+                                        originalWaveName = waveFileMap(dataFile);
+                                    end
+                                end
+                            catch ME_findName
+                                 addLog(sprintf('ERROR finding original wave name for result %s: %s', resBase, ME_findName.message));
+                            end
+
+                            % If we found the original wave name, use it in the output filenames
+                            if ~isempty(originalWaveName)
+                                outCsv = [originalWaveName, '_scouts.csv'];
+                                wavePNG = [originalWaveName, '_Source.png'];
+                                try
+                                    scoutExportCSV_specificResult(thisResFile, outCsv);
+                                    addLog(['(Night) CSV => ', outCsv]);
+                                catch ME_csv
+                                    addLog(sprintf('ERROR exporting CSV %s: %s', outCsv, ME_csv.message));
+                                end
+                                try
+                                    screenshotSourceColormap_specificResult(thisResFile, wavePNG);
+                                    addLog(['(Night) Screenshot => ', wavePNG]);
+                                catch ME_png
+                                    addLog(sprintf('ERROR saving screenshot %s: %s', wavePNG, ME_png.message));
+                                end
+                            else
+                                % Fallback to the original naming if mapping fails
+                                outCsv = [resBase, '_scouts.csv'];
+                                wavePNG = [resBase, '_Source.png'];
+                                 try
+                                    scoutExportCSV_specificResult(thisResFile, outCsv);
+                                    addLog(['(Night) CSV => ', outCsv, ' (no wave mapping found)']);
+                                catch ME_csv
+                                    addLog(sprintf('ERROR exporting CSV %s: %s', outCsv, ME_csv.message));
+                                end
+                                try
+                                    screenshotSourceColormap_specificResult(thisResFile, wavePNG);
+                                    addLog(['(Night) Screenshot => ', wavePNG, ' (no wave mapping found)']);
+                                catch ME_png
+                                    addLog(sprintf('ERROR saving screenshot %s: %s', wavePNG, ME_png.message));
+                                end
+                            end
+                        end % End export loop over sResults
+                        addLog(['(Night) Finished attempting CSV + PNG exports for condition => ', currentStageCond]);
+                    end % End if ~isempty(sResults)
+
+                catch ME_export
+                    addLog(sprintf('ERROR during export section for condition=%s: %s', currentStageCond, ME_export.message));
+                end
+                cd(oldDir); % Change back directory regardless of errors in 'try' block
+
+            end % End stage condition loop
 
             addLog(['DONE with subject=', SubjName, ' night=', NightName,'-------------------------------']);
         end % End NIGHT LOOP (nightIdx)
-
-        % === REMOVED old head model copy loop ===
-
     end % End SUBJECT LOOP (subIdx)
 
     % 4) Final log message
