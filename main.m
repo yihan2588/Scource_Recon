@@ -377,6 +377,14 @@ function main()
                 catch ME_overwrite
                      addLog(sprintf('ERROR overwriting channels for %s: %s.', thisMain, ME_overwrite.message));
                 end
+
+                % Project electrodes to scalp surface
+                try
+                    project_electrodes_to_scalp(SubjName, condStage, @addLog);
+                    addLog('   => Projected electrodes to scalp surface.');
+                catch ME_project
+                    addLog(sprintf('ERROR projecting electrodes for %s: %s.', thisMain, ME_project.message));
+                end
             end % End mainEEGFiles loop
 
             % (D) Compute noise cov for this night => condition=[NightName,'_noise']
@@ -583,6 +591,10 @@ function main()
 
                             % If we found the original wave name, use it in the output filenames
                             if ~isempty(originalWaveName)
+                                % Default data threshold for source visualization
+                                % (values below this threshold will be transparent)
+                                defaultDataThreshold = 0.3; 
+
                                 outCsv = [originalWaveName, '_scouts.csv'];
                                 wavePNG = [originalWaveName, '_Source.png'];
                                 try
@@ -592,10 +604,23 @@ function main()
                                     addLog(sprintf('ERROR exporting CSV %s: %s', outCsv, ME_csv.message));
                                 end
                                 try
-                                    screenshotSourceColormap_specificResult(thisResFile, wavePNG);
+                                    screenshotSourceColormap_specificResult(thisResFile, wavePNG, defaultDataThreshold);
                                     addLog(['(Night) Screenshot => ', wavePNG]);
                                 catch ME_png
                                     addLog(sprintf('ERROR saving screenshot %s: %s', wavePNG, ME_png.message));
+                                end
+                                try
+                                    screenshotSourceMollweide_specificResult(thisResFile, [originalWaveName, '_Mollweide.png'], defaultDataThreshold);
+                                    addLog(['(Night) Mollweide Screenshot => ', [originalWaveName, '_Mollweide.png']]);
+                                catch ME_mollweide_png
+                                    addLog(sprintf('ERROR saving Mollweide screenshot %s: %s', [originalWaveName, '_Mollweide.png'], ME_mollweide_png.message));
+                                end
+                                try
+                                    sensorCapPng = strcat(originalWaveName, '_SensorCap.png');
+                                    screenshotSensorCap_specificResult(dataFile, sensorCapPng);
+                                    addLog(['(Night) Sensor Cap Screenshot => ', sensorCapPng]);
+                                catch ME_sensorcap_png
+                                    addLog(sprintf('ERROR saving Sensor Cap screenshot %s: %s', sensorCapPng, ME_sensorcap_png.message));
                                 end
                             else
                                 % Fallback to the original naming if mapping fails
@@ -608,16 +633,28 @@ function main()
                                     addLog(sprintf('ERROR exporting CSV %s: %s', outCsv, ME_csv.message));
                                 end
                                 try
-                                    screenshotSourceColormap_specificResult(thisResFile, wavePNG);
+                                    screenshotSourceColormap_specificResult(thisResFile, wavePNG, defaultDataThreshold);
                                     addLog(['(Night) Screenshot => ', wavePNG, ' (no wave mapping found)']);
                                 catch ME_png
                                     addLog(sprintf('ERROR saving screenshot %s: %s', wavePNG, ME_png.message));
+                                end
+                                try
+                                    screenshotSourceMollweide_specificResult(thisResFile, [resBase, '_Mollweide.png'], defaultDataThreshold);
+                                    addLog(['(Night) Mollweide Screenshot => ', [resBase, '_Mollweide.png'], ' (no wave mapping found)']);
+                                catch ME_mollweide_png
+                                    addLog(sprintf('ERROR saving Mollweide screenshot %s: %s', [resBase, '_Mollweide.png'], ME_mollweide_png.message));
+                                end
+                                try
+                                    sensorCapPng = strcat(resBase, '_SensorCap.png');
+                                    screenshotSensorCap_specificResult(dataFile, sensorCapPng);
+                                    addLog(['(Night) Sensor Cap Screenshot => ', sensorCapPng, ' (no wave mapping found)']);
+                                catch ME_sensorcap_png
+                                    addLog(sprintf('ERROR saving Sensor Cap screenshot %s: %s', sensorCapPng, ME_sensorcap_png.message));
                                 end
                             end
                         end % End export loop over sResults
                         addLog(['(Night) Finished attempting CSV + PNG exports for condition => ', currentStageCond]);
                     end % End if ~isempty(sResults)
-
                 catch ME_export
                     addLog(sprintf('ERROR during export section for condition=%s: %s', currentStageCond, ME_export.message));
                 end

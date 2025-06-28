@@ -1,8 +1,6 @@
-[2025-05-29 12:11:01] === Pipeline Start ===
-[2025-05-29 12:11:02] Brainstorm already running.
-[2025-05-29 12:11:02] Scanning Brainstorm DB directory for protocol folders: /Users/wyh/Downloads/brainstorm_dir
-[2025-05-29 12:11:02] Note: No protocol.mat found in directory: Protocol45
-[2025-05-29 12:11:02] Note: No protocol.mat found in directory: Protocol46
-[2025-05-29 12:11:07] Creating new protocol: 529
-[2025-05-29 12:11:08] New protocol "529" created and activated.
-[2025-05-29 12:11:15] Parsed STRENGTHEN paths.
+[2025-06-13 18:06:11] === Pipeline Start ===
+[2025-06-13 18:06:11] Brainstorm already running.
+[2025-06-13 18:06:11] Scanning Brainstorm DB directory for protocol folders: /Users/wyh/Downloads/brainstorm_dir
+[2025-06-13 18:06:33] Creating new protocol: 613
+[2025-06-13 18:06:35] New protocol "613" created and activated.
+[2025-06-13 18:06:46] Parsed STRENGTHEN paths.

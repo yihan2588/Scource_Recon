@@ -225,7 +225,7 @@ function bst_comparison()
 
                 % Run comparison and CAPTURE the output file handle
                 sNewResult = bst_process('CallProcess', 'process_matlab_eval2', sFileA_cell, sFileB_cell, ...
-                    'matlab', ['Data = (DataA.^2 - DataB.^2) ./ (DataB.^2);' 10 'Condition = ''' comp_name ''';']);
+                    'matlab', ['Data = 100 * (DataA.^2 - DataB.^2) ./ (DataB.^2);' 10 'Condition = ''' comp_name ''';']);
                 
                 comparison_results{iComp} = sNewResult; % Store the handle
                 if ~isempty(sNewResult)
@@ -235,73 +235,30 @@ function bst_comparison()
                 end
             end
             
-            % --- Step 3: Take Screenshots ---
-            addLog('Step 3: Generating contact sheet screenshots...');
+            % --- Step 3: Take Source Screenshots with Standardized Colormaps ---
+            addLog('Step 3: Generating source contact sheet screenshots...');
             orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
             
-            % Create a combined list of all result files to screenshot
-            all_results_to_screenshot = {};
-            
-            % Add averaged files
+            % Get handles for the two groups of files
+            source_stage_results = {};
             for iStage = 1:numel(stages)
-                sResult = bst_process('CallProcess', 'process_select_files_results', [], [], ...
-                    'subjectname', SubjName, ...
-                    'condition',   [NightName, '_', stages{iStage}], ...
-                    'tag',         [stages{iStage}, '_avg']);
+                sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', [NightName, '_', stages{iStage}], 'tag', [stages{iStage}, '_avg']);
                 if ~isempty(sResult)
-                    all_results_to_screenshot{end+1} = sResult;
+                    source_stage_results{end+1} = sResult;
                 end
             end
-            
-            % Add comparison files that were successfully created
+            source_comparison_results = {};
             for iComp = 1:numel(comparison_results)
                 if ~isempty(comparison_results{iComp})
-                    all_results_to_screenshot{end+1} = comparison_results{iComp};
+                    source_comparison_results{end+1} = comparison_results{iComp};
                 end
             end
 
-            % Loop through all results and screenshot from all angles
-            for iRes = 1:numel(all_results_to_screenshot)
-                sResult = all_results_to_screenshot{iRes};
-                res_cond_name = sResult(1).Condition; % e.g., 'Night1_pre-stim' or 'Stim_vs_Pre'
-                
-                % Create specific output directory for this source result
-                outputDir = fullfile(baseOutputDir, 'source', res_cond_name);
-                if ~exist(outputDir, 'dir'), mkdir(outputDir); end
+            % Process Source Stages
+            process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, []);
+            % Process Source Comparisons
+            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, []);
 
-                for iOrient = 1:numel(orientations)
-                    orientation = orientations{iOrient};
-                    
-                    try
-                        % Construct a simpler filename, as the folder is now descriptive
-                        outputFileName = fullfile(outputDir, [SubjName, '_', NightName, '_', orientation, '.png']);
-                        addLog(sprintf('Screenshotting source %s (%s) to %s', res_cond_name, orientation, outputFileName));
-                        
-                        % Display sources
-                        hFig = script_view_sources(sResult(1).FileName, 'cortex');
-                        
-                        % Set camera orientation
-                        figure_3d('SetStandardView', hFig, orientation);
-                        
-                        % Create contact sheet
-                        hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
-                        
-                        % Get image data and save
-                        img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
-                        out_image(outputFileName, img);
-                        
-                        % Close figures
-                        close(hContactFig);
-                        close(hFig);
-                        addLog('   => Screenshot saved.');
-                        
-                    catch ME_screenshot
-                        addLog(sprintf('ERROR generating screenshot for %s (%s): %s', res_cond_name, orientation, ME_screenshot.message));
-                        if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
-                        if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
-                    end
-                end
-            end
 
             % =================================================================================
             % === SENSOR SPACE (2D TOPOGRAPHY) ANALYSIS
@@ -314,30 +271,14 @@ function bst_comparison()
                 stage = stages{iStage};
                 condition = [NightName, '_', stage];
                 avg_tag = [stage, '_sensor_avg'];
-                
                 addLog(sprintf('Averaging sensor data for stage: %s', stage));
-                
-                % Select all DATA files in the condition
-                sFiles_select = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-                    'subjectname', SubjName, ...
-                    'condition',   condition);
-                
+                sFiles_select = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', condition);
                 if isempty(sFiles_select)
                     addLog(sprintf('WARNING: No data files found for %s. Skipping sensor averaging.', condition));
                     continue;
                 end
-
-                % Average (arithmetic mean)
-                sFiles_avg = bst_process('CallProcess', 'process_average', sFiles_select, [], ...
-                    'avgtype',    1, ...  % Everything
-                    'avg_func',   1, ...  % Arithmetic average: mean(x)
-                    'weighted',   0);
-                
-                % Add tag
-                bst_process('CallProcess', 'process_add_tag', sFiles_avg, [], ...
-                    'tag',      avg_tag, ...
-                    'output',   'name');
-                    
+                sFiles_avg = bst_process('CallProcess', 'process_average', sFiles_select, [], 'avgtype', 1, 'avg_func', 1, 'weighted', 0);
+                bst_process('CallProcess', 'process_add_tag', sFiles_avg, [], 'tag', avg_tag, 'output', 'name');
                 addLog(sprintf('   => Created sensor average file with tag: %s', avg_tag));
             end
 
@@ -346,37 +287,22 @@ function bst_comparison()
             sensor_comparison_results = {};
             for iComp = 1:numel(comparisons)
                 comp_pair = comparisons{iComp};
-                stageA_name = comp_pair{1};
-                stageB_name = comp_pair{2};
-                comp_name_base = comp_pair{3};
-                comp_name_sensor = [comp_name_base, '_sensor'];
-                
-                condA = [NightName, '_', stageA_name];
-                condB = [NightName, '_', stageB_name];
-                tagA = [stageA_name, '_sensor_avg'];
-                tagB = [stageB_name, '_sensor_avg'];
-                
+                comp_name_sensor = [comp_pair{3}, '_sensor'];
+                condA = [NightName, '_', comp_pair{1}];
+                condB = [NightName, '_', comp_pair{2}];
+                tagA = [comp_pair{1}, '_sensor_avg'];
+                tagB = [comp_pair{2}, '_sensor_avg'];
                 addLog(sprintf('Comparing (sensor): %s', comp_name_sensor));
-
-                % Select File A & B (averaged data files)
-                sFileA_struct = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-                    'subjectname', SubjName, 'condition', condA, 'tag', tagA);
-                sFileB_struct = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-                    'subjectname', SubjName, 'condition', condB, 'tag', tagB);
-                    
+                sFileA_struct = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', condA, 'tag', tagA);
+                sFileB_struct = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', condB, 'tag', tagB);
                 if isempty(sFileA_struct) || isempty(sFileB_struct)
                     addLog(sprintf('WARNING: Could not find one or both sensor avg files for comparison %s. Skipping.', comp_name_sensor));
                     sensor_comparison_results{iComp} = [];
                     continue;
                 end
-                
                 sFileA_cell = {sFileA_struct(1).FileName};
                 sFileB_cell = {sFileB_struct(1).FileName};
-
-                % Run comparison: (A-B)/B
-                sNewResult = bst_process('CallProcess', 'process_matlab_eval2', sFileA_cell, sFileB_cell, ...
-                    'matlab', ['Data = (DataA - DataB) ./ DataB;' 10 'Condition = ''' comp_name_sensor ''';']);
-                
+                sNewResult = bst_process('CallProcess', 'process_matlab_eval2', sFileA_cell, sFileB_cell, 'matlab', ['Data = 100 * (DataA - DataB) ./ DataB;' 10 'Condition = ''' comp_name_sensor ''';']);
                 sensor_comparison_results{iComp} = sNewResult;
                 if ~isempty(sNewResult)
                     addLog(sprintf('   => Created sensor comparison condition: %s', comp_name_sensor));
@@ -385,72 +311,129 @@ function bst_comparison()
                 end
             end
 
-            % --- Step 6: Take 2D Topography Screenshots ---
+            % --- Step 6: Take 2D Topography Screenshots with Standardized Colormaps ---
             addLog('Step 6: Generating 2D topography contact sheets...');
             
-            % Create a list of all sensor data files to screenshot
-            all_sensor_files_to_screenshot = {};
-            
-            % Add averaged sensor data files
+            % Get handles for the two groups of files
+            sensor_stage_results = {};
             for iStage = 1:numel(stages)
-                sResult = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-                    'subjectname', SubjName, ...
-                    'condition',   [NightName, '_', stages{iStage}], ...
-                    'tag',         [stages{iStage}, '_sensor_avg']);
+                sResult = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', [NightName, '_', stages{iStage}], 'tag', [stages{iStage}, '_sensor_avg']);
                 if ~isempty(sResult)
-                    all_sensor_files_to_screenshot{end+1} = sResult;
+                    sensor_stage_results{end+1} = sResult;
                 end
             end
-            
-            % Add sensor comparison files
+            sensor_comparison_files = {};
             for iComp = 1:numel(sensor_comparison_results)
                 if ~isempty(sensor_comparison_results{iComp})
-                    all_sensor_files_to_screenshot{end+1} = sensor_comparison_results{iComp};
+                    sensor_comparison_files{end+1} = sensor_comparison_results{iComp};
                 end
             end
 
-            % Loop through all files and generate 2D contact sheets
-            for iRes = 1:numel(all_sensor_files_to_screenshot)
-                sFile = all_sensor_files_to_screenshot{iRes};
-                file_cond_name = sFile(1).Condition;
-                
-                % Create specific output directory for this sensor result
-                outputDir = fullfile(baseOutputDir, 'sensor', file_cond_name);
-                if ~exist(outputDir, 'dir'), mkdir(outputDir); end
-
-                try
-                    % Construct a simpler filename
-                    outputFileName = fullfile(outputDir, [SubjName, '_', NightName, '_2D_topo.png']);
-                    addLog(sprintf('Screenshotting 2D topography for %s to %s', file_cond_name, outputFileName));
-                    
-                    % Create the initial topography figure
-                    hFig = view_topography(sFile(1).FileName, 'EEG', '2DSensorCap');
-                    if isempty(hFig)
-                        addLog(sprintf('ERROR: Could not create topography figure for %s.', file_cond_name));
-                        continue;
-                    end
-                    
-                    % Create contact sheet figure
-                    hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
-                    
-                    % Get the image definition (RGB) from the figure and save
-                    img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
-                    out_image(outputFileName, img);
-                    
-                    % Close figures
-                    close(hContactFig);
-                    close(hFig);
-                    addLog('   => Screenshot saved.');
-                    
-                catch ME_screenshot
-                    addLog(sprintf('ERROR generating 2D topography screenshot for %s: %s', file_cond_name, ME_screenshot.message));
-                    if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
-                    if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
-                end
-            end
+            % Process Sensor Stages
+            process_screenshot_group(sensor_stage_results, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, []);
+            % Process Sensor Comparisons
+            process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%');
         end % End night loop
     end % End subject loop
 
     addLog('=== Comparison Pipeline End ===');
     disp(['Cumulative log saved to: ', logName]);
+end
+
+% --- HELPER FUNCTION FOR SCREENSHOTS ---
+function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputDir, SubjName, NightName, orientations, data_field_accessor, use_abs, display_units)
+    if isempty(sFiles_group)
+        return;
+    end
+
+    % Find global min/max for the group
+    gMin = inf;
+    gMax = -inf;
+    for i = 1:numel(sFiles_group)
+        sFile = sFiles_group{i};
+        if strcmpi(type, 'source')
+            bst_file = in_bst_results(sFile(1).FileName, 0);
+        else % sensor
+            bst_file = in_bst_data(sFile(1).FileName);
+        end
+        data = data_field_accessor(bst_file);
+        if use_abs
+            data = abs(data);
+        end
+        gMin = min(gMin, min(data(:)));
+        gMax = max(gMax, max(data(:)));
+    end
+
+    if isinf(gMin) || isinf(gMax)
+        disp(['SKIPPING screenshot group for ' colormap_type ': No data found.']);
+        return;
+    end
+    
+    % Determine symmetric max for non-absolute scales
+    symMax = max(abs([gMin, gMax]));
+
+    % Loop through files to take screenshots
+    for i = 1:numel(sFiles_group)
+        sFile = sFiles_group{i};
+        res_cond_name = sFile(1).Condition;
+
+        if strcmpi(type, 'source')
+            % 3D Source screenshots
+            for iOrient = 1:numel(orientations)
+                orientation = orientations{iOrient};
+                outputDir = fullfile(baseOutputDir, 'source', orientation);
+                if ~exist(outputDir, 'dir'), mkdir(outputDir); end
+                
+                try
+                    outputFileName = fullfile(outputDir, [res_cond_name, '.png']);
+                    hFig = script_view_sources(sFile(1).FileName, 'cortex');
+                    
+                    % Force colormap settings on the newly created figure
+                    if use_abs
+                        bst_colormaps('SetMaxCustom', colormap_type, display_units, 0, gMax);
+                    else
+                        bst_colormaps('SetMaxCustom', colormap_type, display_units, -symMax, symMax);
+                    end
+                    bst_colormaps('FireColormapChanged', colormap_type);
+
+                    figure_3d('SetStandardView', hFig, orientation);
+                    hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
+                    img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
+                    out_image(outputFileName, img);
+                    close(hContactFig); close(hFig);
+                catch ME
+                    disp(['ERROR generating source screenshot: ' ME.message]);
+                    if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
+                    if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
+                end
+            end
+        else % 2D Sensor screenshots
+            outputDir = fullfile(baseOutputDir, 'sensor');
+            if ~exist(outputDir, 'dir'), mkdir(outputDir); end
+
+            try
+                outputFileName = fullfile(outputDir, [res_cond_name, '_2D_topo.png']);
+                hFig = view_topography(sFile(1).FileName, 'EEG', '2DSensorCap');
+
+                % Force colormap settings on the newly created figure
+                if use_abs
+                    bst_colormaps('SetMaxCustom', colormap_type, display_units, 0, gMax);
+                else
+                    bst_colormaps('SetMaxCustom', colormap_type, display_units, -symMax, symMax);
+                end
+                bst_colormaps('FireColormapChanged', colormap_type);
+
+                hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
+                img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
+                out_image(outputFileName, img);
+                close(hContactFig); close(hFig);
+            catch ME
+                disp(['ERROR generating sensor screenshot: ' ME.message]);
+                if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
+                if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
+            end
+        end
+    end
+    % Restore default colormap behavior
+    bst_colormaps('SetMaxMode', colormap_type, 'global');
 end
