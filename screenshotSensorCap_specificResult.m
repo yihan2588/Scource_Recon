@@ -6,6 +6,7 @@ function screenshotSensorCap_specificResult(dataFile, outPng)
     
     [hFig, ~, ~] = view_topography(dataFile, 'EEG', '2DSensorCap');
     if ~isempty(hFig)
+        set(hFig, 'Visible', 'off');
         % Set time to 0ms
         panel_time('SetCurrentTime', 0);
         saveas(hFig, outPng);

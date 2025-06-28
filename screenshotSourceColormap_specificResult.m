@@ -7,7 +7,8 @@ function screenshotSourceColormap_specificResult(resultFile, outPng, DataThresho
         DataThreshold = 0.3; % Default threshold
     end
 
-    [hFig, ~, ~] = view_surface_data([], resultFile, 'EEG', 'NewFigure');
+    hFig = figure('Visible', 'off');
+    view_surface_data(hFig, resultFile, 'EEG');
     if ~isempty(hFig)
         % Set surface threshold
         panel_surface('SetDataThreshold', hFig, 1, DataThreshold);

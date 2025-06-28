@@ -9,6 +9,7 @@ function screenshotSourceMollweide_specificResult(resultFile, outPng, DataThresh
 
     [hFig, ~, ~] = view_surface_sphere(resultFile, 'mollweide');
     if ~isempty(hFig)
+        set(hFig, 'Visible', 'off');
         % Set surface threshold
         panel_surface('SetDataThreshold', hFig, 1, DataThreshold);
         saveas(hFig, outPng);
