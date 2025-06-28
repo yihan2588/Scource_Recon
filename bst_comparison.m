@@ -1,0 +1,439 @@
+function bst_comparison()
+    % BST_COMPARISON: Post-processing pipeline for source_recon results.
+    %
+    % LOGIC:
+    %   1) Connect to an existing Brainstorm protocol.
+    %   2) Identify subjects and nights that have been processed.
+    %   3) For each subject/night:
+    %       a) Average (abs value) all sLORETA results for each stage (pre, stim, post).
+    %       b) Perform power percentage change comparisons (A^2-B^2)/B^2 for:
+    %          - Stim vs. Pre
+    %          - Post vs. Stim
+    %          - Post vs. Pre
+    %       c) Save comparison results to new conditions.
+    %       d) Take contact sheet screenshots of all averaged and comparison maps.
+
+    % --- Setup ---
+    % Prompt user for the STRENGTHEN directory path
+    strengthenDir = input('Enter the path to the STRENGTHEN folder: ', 's');
+    if isempty(strengthenDir) || ~exist(strengthenDir, 'dir')
+        error('STRENGTHEN directory not found or invalid. Exiting.');
+    end
+
+    % Get directory of this script
+    scriptDir = fileparts(mfilename('fullpath'));
+    addpath(scriptDir);
+
+    % Setup cumulative logging
+    logName = fullfile(strengthenDir, 'comparison_run.log');
+    logMessages = {};
+
+    function addLog(msg)
+        timestampStr = datestr(now, 'yyyy-mm-dd HH:MM:SS');
+        fullMsg = sprintf('[%s] %s', timestampStr, msg);
+        disp(fullMsg);
+        logMessages{end+1} = fullMsg;
+        writeCumulativeLog(logName, logMessages);
+    end
+
+    addLog('=== Comparison Pipeline Start ===');
+
+    % Ensure Brainstorm is running
+    if ~brainstorm('status')
+        addLog('Brainstorm not running. Starting in nogui mode...');
+        brainstorm nogui;
+        pause(5);
+        addLog('Brainstorm started.');
+    else
+        addLog('Brainstorm already running.');
+    end
+
+    % --- Protocol Selection ---
+    protocolNames = {};
+    DbDir = bst_get('BrainstormDbDir');
+    if isempty(DbDir) || ~exist(DbDir, 'dir')
+        addLog('ERROR: Brainstorm database directory not found. Exiting.');
+        return;
+    end
+    
+    dirContents = dir(DbDir);
+    subDirs = dirContents([dirContents.isdir] & ~ismember({dirContents.name},{'.','..'}));
+    for iDir = 1:length(subDirs)
+        protocolMatPath = fullfile(DbDir, subDirs(iDir).name, 'data', 'protocol.mat');
+        if exist(protocolMatPath, 'file')
+            matData = load(protocolMatPath, 'ProtocolInfo');
+            if isfield(matData, 'ProtocolInfo') && isfield(matData.ProtocolInfo, 'Comment')
+                protocolNames{end+1} = matData.ProtocolInfo.Comment;
+            end
+        end
+    end
+    
+    if isempty(protocolNames)
+        addLog('ERROR: No existing protocols found. Please run source_recon first. Exiting.');
+        return;
+    end
+
+    disp('=== Select the Protocol to Analyze ===');
+    protocolNames = sort(protocolNames);
+    for i = 1:numel(protocolNames)
+        disp([num2str(i) ': ' protocolNames{i}]);
+    end
+    
+    choiceNum = -1;
+    while choiceNum < 1 || choiceNum > numel(protocolNames)
+        try
+            choiceStr = input(['Select protocol number (1-' num2str(numel(protocolNames)) '): '], 's');
+            choiceNum = str2double(choiceStr);
+            if isnan(choiceNum) || floor(choiceNum) ~= choiceNum
+                choiceNum = -1;
+                disp('Invalid input.');
+            end
+        catch
+            choiceNum = -1;
+            disp('Invalid input.');
+        end
+    end
+    
+    selectedProtocolName = protocolNames{choiceNum};
+    iProtocol = bst_get('Protocol', selectedProtocolName);
+    gui_brainstorm('SetCurrentProtocol', iProtocol);
+    addLog(['Selected protocol: ', selectedProtocolName]);
+
+    % --- Get Subjects and Nights from Protocol ---
+    dataDir = fullfile(DbDir, selectedProtocolName, 'data');
+    dirContents = dir(dataDir);
+    % Filter for directories, excluding '.', '..', and special '@' folders
+    subjDirs = dirContents([dirContents.isdir] & ~startsWith({dirContents.name}, {'.', '@'}));
+    SubjectNames = {subjDirs.name};
+    
+    if isempty(SubjectNames)
+        addLog('ERROR: No subject folders found in the protocol''s data directory. Exiting.');
+        return;
+    end
+    addLog(sprintf('Found %d subjects in the protocol: %s', numel(SubjectNames), strjoin(SubjectNames, ', ')));
+
+    % --- Main Loop ---
+    for iSubj = 1:numel(SubjectNames)
+        SubjName = SubjectNames{iSubj};
+        addLog(sprintf('--- Starting Subject %d/%d: %s ---', iSubj, numel(SubjectNames), SubjName));
+
+        % Find nights for this subject by inspecting condition folder names
+        subjDir = fullfile(dataDir, SubjName);
+        condDirContents = dir(subjDir);
+        condDirs = condDirContents([condDirContents.isdir] & ~startsWith({condDirContents.name}, {'.', '@'}));
+        condNames = {condDirs.name};
+        % Exclude comparison conditions from previous runs from night detection
+        condNamesForNightDetection = condNames(~contains(condNames, '_vs_'));
+        
+        nightNames = {};
+        for iCond = 1:numel(condNamesForNightDetection)
+            parts = strsplit(condNamesForNightDetection{iCond}, '_');
+            if numel(parts) > 1
+                nightNames{end+1} = parts{1};
+            end
+        end
+        uniqueNightNames = unique(nightNames);
+        addLog(sprintf('Found nights for %s: %s', SubjName, strjoin(uniqueNightNames, ', ')));
+
+        for iNight = 1:numel(uniqueNightNames)
+            NightName = uniqueNightNames{iNight};
+            addLog(sprintf('Processing Night: %s', NightName));
+            
+            % Define stages and comparison pairs
+            stages = {'pre-stim', 'stim', 'post-stim'};
+            comparisons = {
+                {'stim', 'pre-stim', 'Stim_vs_Pre'}, ...
+                {'post-stim', 'stim', 'Post_vs_Stim'}, ...
+                {'post-stim', 'pre-stim', 'Post_vs_Pre'}  ...
+            };
+            
+            % Define a base output directory
+            baseOutputDir = fullfile(strengthenDir, 'contact_sheet_stages_comparison', SubjName, NightName);
+
+            % --- Step 1: Average sLORETA results for each stage ---
+            addLog('Step 1: Averaging sLORETA results...');
+            for iStage = 1:numel(stages)
+                stage = stages{iStage};
+                condition = [NightName, '_', stage];
+                avg_tag = [stage, '_avg'];
+                
+                addLog(sprintf('Averaging stage: %s', stage));
+                
+                % Select all sLORETA results in the condition
+                sFiles_select = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+                    'subjectname', SubjName, ...
+                    'condition',   condition, ...
+                    'tag',         'sLORETA', ...
+                    'outprocesstab', 'process1');
+                
+                if isempty(sFiles_select)
+                    addLog(sprintf('WARNING: No sLORETA files found for %s. Skipping averaging.', condition));
+                    continue;
+                end
+
+                % Average (absolute value)
+                sFiles_avg = bst_process('CallProcess', 'process_average', sFiles_select, [], ...
+                    'avgtype',    1, ...  % Everything
+                    'avg_func',   2, ...  % mean(abs(x))
+                    'weighted',   0);
+                
+                % Add tag
+                bst_process('CallProcess', 'process_add_tag', sFiles_avg, [], ...
+                    'tag',      avg_tag, ...
+                    'output',   'name');
+                    
+                addLog(sprintf('   => Created average file with tag: %s', avg_tag));
+            end
+
+            % --- Step 2: Perform Comparisons ---
+            addLog('Step 2: Performing power difference comparisons...');
+            comparison_results = {}; % Cell array to store handles to the new results
+            for iComp = 1:numel(comparisons)
+                comp_pair = comparisons{iComp};
+                stageA_name = comp_pair{1};
+                stageB_name = comp_pair{2};
+                comp_name = comp_pair{3};
+                
+                condA = [NightName, '_', stageA_name];
+                condB = [NightName, '_', stageB_name];
+                tagA = [stageA_name, '_avg'];
+                tagB = [stageB_name, '_avg'];
+                
+                addLog(sprintf('Comparing: %s', comp_name));
+
+                % Select File A struct
+                sFileA_struct = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+                    'subjectname',   SubjName, ...
+                    'condition',     condA, ...
+                    'tag',           tagA);
+
+                % Select File B struct
+                sFileB_struct = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+                    'subjectname',   SubjName, ...
+                    'condition',     condB, ...
+                    'tag',           tagB);
+                    
+                if isempty(sFileA_struct) || isempty(sFileB_struct)
+                    addLog(sprintf('WARNING: Could not find one or both avg files for comparison %s. Skipping.', comp_name));
+                    comparison_results{iComp} = []; % Add empty placeholder
+                    continue;
+                end
+                
+                % Replicate the example script: extract filenames into cell arrays
+                sFileA_cell = {sFileA_struct(1).FileName};
+                sFileB_cell = {sFileB_struct(1).FileName};
+
+                % Run comparison and CAPTURE the output file handle
+                sNewResult = bst_process('CallProcess', 'process_matlab_eval2', sFileA_cell, sFileB_cell, ...
+                    'matlab', ['Data = 100 * (DataA.^2 - DataB.^2) ./ (DataB.^2);' 10 'Condition = ''' comp_name ''';']);
+                
+                comparison_results{iComp} = sNewResult; % Store the handle
+                if ~isempty(sNewResult)
+                    addLog(sprintf('   => Created comparison condition: %s', comp_name));
+                else
+                    addLog(sprintf('   ERROR: Failed to create comparison condition: %s', comp_name));
+                end
+            end
+            
+            % --- Step 3: Take Source Screenshots with Standardized Colormaps ---
+            addLog('Step 3: Generating source contact sheet screenshots...');
+            orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
+            
+            % Get handles for the two groups of files
+            source_stage_results = {};
+            for iStage = 1:numel(stages)
+                sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', [NightName, '_', stages{iStage}], 'tag', [stages{iStage}, '_avg']);
+                if ~isempty(sResult)
+                    source_stage_results{end+1} = sResult;
+                end
+            end
+            source_comparison_results = {};
+            for iComp = 1:numel(comparison_results)
+                if ~isempty(comparison_results{iComp})
+                    source_comparison_results{end+1} = comparison_results{iComp};
+                end
+            end
+
+            % Process Source Stages
+            process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, []);
+            % Process Source Comparisons
+            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, []);
+
+
+            % =================================================================================
+            % === SENSOR SPACE (2D TOPOGRAPHY) ANALYSIS
+            % =================================================================================
+            addLog('--- Starting Sensor Space (2D Topography) Analysis ---');
+
+            % --- Step 4: Average raw data for each stage ---
+            addLog('Step 4: Averaging raw sensor data...');
+            for iStage = 1:numel(stages)
+                stage = stages{iStage};
+                condition = [NightName, '_', stage];
+                avg_tag = [stage, '_sensor_avg'];
+                addLog(sprintf('Averaging sensor data for stage: %s', stage));
+                sFiles_select = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', condition);
+                if isempty(sFiles_select)
+                    addLog(sprintf('WARNING: No data files found for %s. Skipping sensor averaging.', condition));
+                    continue;
+                end
+                sFiles_avg = bst_process('CallProcess', 'process_average', sFiles_select, [], 'avgtype', 1, 'avg_func', 1, 'weighted', 0);
+                bst_process('CallProcess', 'process_add_tag', sFiles_avg, [], 'tag', avg_tag, 'output', 'name');
+                addLog(sprintf('   => Created sensor average file with tag: %s', avg_tag));
+            end
+
+            % --- Step 5: Perform Sensor Space Comparisons ---
+            addLog('Step 5: Performing sensor space relative difference comparisons...');
+            sensor_comparison_results = {};
+            for iComp = 1:numel(comparisons)
+                comp_pair = comparisons{iComp};
+                comp_name_sensor = [comp_pair{3}, '_sensor'];
+                condA = [NightName, '_', comp_pair{1}];
+                condB = [NightName, '_', comp_pair{2}];
+                tagA = [comp_pair{1}, '_sensor_avg'];
+                tagB = [comp_pair{2}, '_sensor_avg'];
+                addLog(sprintf('Comparing (sensor): %s', comp_name_sensor));
+                sFileA_struct = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', condA, 'tag', tagA);
+                sFileB_struct = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', condB, 'tag', tagB);
+                if isempty(sFileA_struct) || isempty(sFileB_struct)
+                    addLog(sprintf('WARNING: Could not find one or both sensor avg files for comparison %s. Skipping.', comp_name_sensor));
+                    sensor_comparison_results{iComp} = [];
+                    continue;
+                end
+                sFileA_cell = {sFileA_struct(1).FileName};
+                sFileB_cell = {sFileB_struct(1).FileName};
+                sNewResult = bst_process('CallProcess', 'process_matlab_eval2', sFileA_cell, sFileB_cell, 'matlab', ['Data = 100 * (DataA - DataB) ./ DataB;' 10 'Condition = ''' comp_name_sensor ''';']);
+                sensor_comparison_results{iComp} = sNewResult;
+                if ~isempty(sNewResult)
+                    addLog(sprintf('   => Created sensor comparison condition: %s', comp_name_sensor));
+                else
+                    addLog(sprintf('   ERROR: Failed to create sensor comparison condition: %s', comp_name_sensor));
+                end
+            end
+
+            % --- Step 6: Take 2D Topography Screenshots with Standardized Colormaps ---
+            addLog('Step 6: Generating 2D topography contact sheets...');
+            
+            % Get handles for the two groups of files
+            sensor_stage_results = {};
+            for iStage = 1:numel(stages)
+                sResult = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', [NightName, '_', stages{iStage}], 'tag', [stages{iStage}, '_sensor_avg']);
+                if ~isempty(sResult)
+                    sensor_stage_results{end+1} = sResult;
+                end
+            end
+            sensor_comparison_files = {};
+            for iComp = 1:numel(sensor_comparison_results)
+                if ~isempty(sensor_comparison_results{iComp})
+                    sensor_comparison_files{end+1} = sensor_comparison_results{iComp};
+                end
+            end
+
+            % Process Sensor Stages
+            process_screenshot_group(sensor_stage_results, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, []);
+            % Process Sensor Comparisons
+            process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%');
+        end % End night loop
+    end % End subject loop
+
+    addLog('=== Comparison Pipeline End ===');
+    disp(['Cumulative log saved to: ', logName]);
+end
+
+% --- HELPER FUNCTION FOR SCREENSHOTS ---
+function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputDir, SubjName, NightName, orientations, data_field_accessor, use_abs, display_units)
+    if isempty(sFiles_group)
+        return;
+    end
+
+    % Find global min/max for the group
+    gMin = inf;
+    gMax = -inf;
+    for i = 1:numel(sFiles_group)
+        sFile = sFiles_group{i};
+        if strcmpi(type, 'source')
+            bst_file = in_bst_results(sFile(1).FileName, 0);
+        else % sensor
+            bst_file = in_bst_data(sFile(1).FileName);
+        end
+        data = data_field_accessor(bst_file);
+        if use_abs
+            data = abs(data);
+        end
+        gMin = min(gMin, min(data(:)));
+        gMax = max(gMax, max(data(:)));
+    end
+
+    if isinf(gMin) || isinf(gMax)
+        disp(['SKIPPING screenshot group for ' colormap_type ': No data found.']);
+        return;
+    end
+    
+    % Determine symmetric max for non-absolute scales
+    symMax = max(abs([gMin, gMax]));
+
+    % Loop through files to take screenshots
+    for i = 1:numel(sFiles_group)
+        sFile = sFiles_group{i};
+        res_cond_name = sFile(1).Condition;
+
+        if strcmpi(type, 'source')
+            % 3D Source screenshots
+            for iOrient = 1:numel(orientations)
+                orientation = orientations{iOrient};
+                outputDir = fullfile(baseOutputDir, 'source', orientation);
+                if ~exist(outputDir, 'dir'), mkdir(outputDir); end
+                
+                try
+                    outputFileName = fullfile(outputDir, [res_cond_name, '.png']);
+                    hFig = script_view_sources(sFile(1).FileName, 'cortex');
+                    
+                    % Force colormap settings on the newly created figure
+                    if use_abs
+                        bst_colormaps('SetMaxCustom', colormap_type, display_units, 0, gMax);
+                    else
+                        bst_colormaps('SetMaxCustom', colormap_type, display_units, -symMax, symMax);
+                    end
+                    bst_colormaps('FireColormapChanged', colormap_type);
+
+                    figure_3d('SetStandardView', hFig, orientation);
+                    hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
+                    img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
+                    out_image(outputFileName, img);
+                    close(hContactFig); close(hFig);
+                catch ME
+                    disp(['ERROR generating source screenshot: ' ME.message]);
+                    if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
+                    if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
+                end
+            end
+        else % 2D Sensor screenshots
+            outputDir = fullfile(baseOutputDir, 'sensor');
+            if ~exist(outputDir, 'dir'), mkdir(outputDir); end
+
+            try
+                outputFileName = fullfile(outputDir, [res_cond_name, '_2D_topo.png']);
+                hFig = view_topography(sFile(1).FileName, 'EEG', '2DSensorCap');
+
+                % Force colormap settings on the newly created figure
+                if use_abs
+                    bst_colormaps('SetMaxCustom', colormap_type, display_units, 0, gMax);
+                else
+                    bst_colormaps('SetMaxCustom', colormap_type, display_units, -symMax, symMax);
+                end
+                bst_colormaps('FireColormapChanged', colormap_type);
+
+                hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
+                img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
+                out_image(outputFileName, img);
+                close(hContactFig); close(hFig);
+            catch ME
+                disp(['ERROR generating sensor screenshot: ' ME.message]);
+                if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
+                if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
+            end
+        end
+    end
+    % Restore default colormap behavior
+    bst_colormaps('SetMaxMode', colormap_type, 'global');
+end

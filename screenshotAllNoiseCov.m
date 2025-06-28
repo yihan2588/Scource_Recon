@@ -10,6 +10,7 @@ function screenshotAllNoiseCov(SubjectName, ConditionName, Modality, baseName)
     for iCov = 1:numel(sStudy.NoiseCov)
         NoiseCovFile = sStudy.NoiseCov(iCov).FileName;
         hFig = view_noisecov(NoiseCovFile, Modality);
+        set(hFig, 'Visible', 'off');
         
         % e.g. "Subject_001_AllWaves_NoiseCov1.png"
         outName = sprintf('%s_NoiseCov%d.png', baseName, iCov);
