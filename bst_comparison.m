@@ -255,9 +255,9 @@ function bst_comparison()
             end
 
             % Process Source Stages
-            process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, []);
+            process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, [], 0.3);
             % Process Source Comparisons
-            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, []);
+            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, [], 0);
 
 
             % =================================================================================
@@ -341,7 +341,7 @@ function bst_comparison()
 end
 
 % --- HELPER FUNCTION FOR SCREENSHOTS ---
-function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputDir, SubjName, NightName, orientations, data_field_accessor, use_abs, display_units)
+function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputDir, SubjName, NightName, orientations, data_field_accessor, use_abs, display_units, dataThreshold)
     if isempty(sFiles_group)
         return;
     end
@@ -395,6 +395,9 @@ function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputD
                         bst_colormaps('SetMaxCustom', colormap_type, display_units, -symMax, symMax);
                     end
                     bst_colormaps('FireColormapChanged', colormap_type);
+                    
+                    % Set the data threshold (amplitude percentage)
+                    panel_surface('SetDataThreshold', hFig, 1, dataThreshold);
 
                     figure_3d('SetStandardView', hFig, orientation);
                     hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
