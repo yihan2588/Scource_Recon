@@ -228,6 +228,51 @@ function main()
     [selectedSubjects, selectedNights] = selectSubjectsNights(subjects);
     addLog('User selected subjects/nights.');
 
+    % (2.6) Prompt user for bad channels for each selected subject/night
+    badChannelMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    for subIdx = 1:numel(selectedSubjects)
+        iSubj = selectedSubjects(subIdx);
+        SubjName = subjects(iSubj).SubjectName;
+        selectedNightsForSubj = selectedNights{iSubj};
+        for nightIdx = 1:numel(selectedNightsForSubj)
+            iN = selectedNightsForSubj(nightIdx);
+            NightName = subjects(iSubj).Nights(iN).NightName;
+            
+            validInput = false;
+            while ~validInput
+                prompt = sprintf('Enter bad channels for %s - %s (comma-separated, format E001,E002) or press Enter for none: ', SubjName, NightName);
+                badChannelsStr = input(prompt, 's');
+
+                if isempty(badChannelsStr)
+                    addLog(sprintf('No bad channels entered for %s - %s.', SubjName, NightName));
+                    validInput = true;
+                    continue;
+                end
+
+                % Split the string by commas and remove any whitespace
+                badChannels = strtrim(strsplit(badChannelsStr, ','));
+                % Filter out any empty elements that might result from trailing commas
+                badChannels = badChannels(~cellfun('isempty', badChannels));
+
+                % Validate format of each channel name
+                isInvalid = cellfun(@(c) isempty(regexp(c, '^E\d{3}$', 'once')), badChannels);
+
+                if any(isInvalid)
+                    invalidNames = strjoin(badChannels(isInvalid), ', ');
+                    disp(['ERROR: The following channel names are invalid: ', invalidNames]);
+                    disp('Please use the format Exxx (e.g., E001, E023).');
+                    % Loop will continue
+                else
+                    mapKey = [SubjName '_' NightName];
+                    badChannelMap(mapKey) = badChannels;
+                    addLog(sprintf('Stored %d valid bad channels for %s.', numel(badChannels), mapKey));
+                    validInput = true;
+                end
+            end
+        end
+    end
+
+
     % If no subjects were selected, exit
     if isempty(selectedSubjects)
         addLog('No subjects selected. Exiting.');
@@ -316,6 +361,12 @@ function main()
                 condNoise = [NightName, '_noise'];
                 importNoiseEEG(SubjName, noiseEEGFile, condNoise); % Import entire duration
                 addLog(['   => Noise EEG imported => ', noiseEEGFile]);
+
+                % Set bad channels for the noise data
+                mapKey = [SubjName '_' NightName];
+                if isKey(badChannelMap, mapKey)
+                    set_bad_channel(SubjName, condNoise, badChannelMap(mapKey), @addLog);
+                end
             catch ME_noiseImp
                  addLog(sprintf('ERROR importing noise EEG for %s/%s: %s.', SubjName, NightName, ME_noiseImp.message));
                  % Decide whether to continue night processing
@@ -379,56 +430,24 @@ function main()
                      addLog(sprintf('ERROR overwriting channels for %s: %s.', thisMain, ME_overwrite.message));
                 end
 
-                % Note: Channel projection will be done after all data is imported
-            end % End mainEEGFiles loop
-
-            % Project electrodes to scalp for all conditions with channel files
-            % This is done after all data is imported but before noise cov/head model/sLORETA
-            addLog('Starting electrode projection for all conditions...');
-            try
-                % Get all studies for this subject
-                allStudies = bst_get('ProtocolStudies');
-                
-                % Find all conditions for this subject that have channel files
-                for i = 1:length(allStudies.Study)
-                    if ~isempty(allStudies.Study(i).BrainStormSubject) && ...
-                       contains(allStudies.Study(i).BrainStormSubject, SubjName)
-                        
-                        % Get condition name
-                        if iscell(allStudies.Study(i).Condition)
-                            condName = allStudies.Study(i).Condition{1};
-                        else
-                            condName = allStudies.Study(i).Condition;
-                        end
-                        
-                        % Skip special conditions
-                        if strcmp(condName, '@intra') || strcmp(condName, '@default_study')
-                            continue;
-                        end
-                        
-                        % Check if this condition has a channel file
-                        if ~isempty(allStudies.Study(i).Channel) && ...
-                           isfield(allStudies.Study(i).Channel, 'FileName') && ...
-                           ~isempty(allStudies.Study(i).Channel.FileName)
-                            
-                            channelFile = allStudies.Study(i).Channel.FileName;
-                            addLog(sprintf('Projecting electrodes for condition: %s', condName));
-                            
-                            try
-                                project_electrodes_to_scalp(SubjName, condName, channelFile, @addLog);
-                                addLog(sprintf('   => Successfully projected electrodes for %s', condName));
-                            catch ME_proj
-                                addLog(sprintf('   => ERROR projecting electrodes for %s: %s', condName, ME_proj.message));
-                            end
-                        end
+                % Project electrodes to scalp surface
+                try
+                    if ~isempty(newChanFile)
+                        project_electrodes_to_scalp(SubjName, condStage, newChanFile, @addLog);
+                        addLog('   => Projected electrodes to scalp surface.');
+                    else
+                        addLog('WARNING:    => No new channel file from OverwriteChannel => skipping projection.');
                     end
+                catch ME_project
+                    addLog(sprintf('ERROR projecting electrodes for %s: %s.', thisMain, ME_project.message));
                 end
-                
-                addLog('Completed electrode projection for all conditions.');
-                
-            catch ME_projAll
-                addLog(sprintf('ERROR during electrode projection phase: %s', ME_projAll.message));
-            end
+
+                % Set bad channels for the slow wave data
+                mapKey = [SubjName '_' NightName];
+                if isKey(badChannelMap, mapKey)
+                    set_bad_channel(SubjName, condStage, badChannelMap(mapKey), @addLog);
+                end
+            end % End mainEEGFiles loop
 
             % (D) Compute noise cov for this night => condition=[NightName,'_noise']
             % This is done once per night, using the noise file.
