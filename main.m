@@ -372,39 +372,37 @@ function main()
                  % Decide whether to continue night processing
             end
 
-            % (C) For each wave .set => import => condition=[NightName, '_<stage>']
+            % (C) Import all wave .set files and identify unique conditions
             waveFileMap = containers.Map(); % Create a storage for mapping wave files to their imported results
             processedStageConditions = {}; % Collect unique stage conditions processed this night
 
             for iFile = 1:numel(mainEEGFiles)
                 thisMain = mainEEGFiles{iFile};
                 [~, slowBase] = fileparts(thisMain);
-                addLog(sprintf('Processing waveFile %d/%d: %s', iFile, numel(mainEEGFiles), thisMain));
+                addLog(sprintf('Importing waveFile %d/%d: %s', iFile, numel(mainEEGFiles), thisMain));
 
-                % Extract stage from filename (e.g., 'proto1_post-stim_sw1_E2' -> 'post-stim')
+                % Extract stage from filename
                 parts = strsplit(slowBase, '_');
                 if numel(parts) < 2
                     addLog(sprintf('WARNING: Could not parse stage from filename: %s. Skipping.', slowBase));
-                    continue; % Skip this file
+                    continue;
                 end
                 stage = parts{2};
                 condStage = [NightName '_' stage];
 
                 % Add to list of processed stage conditions if new
                 if ~ismember(condStage, processedStageConditions)
-                    processedStageConditions{end+1} = condStage; %#ok<AGROW>
+                    processedStageConditions{end+1} = condStage;
                 end
                 % Capture first stage condition for head model computation
                 if isempty(firstStageCondForSubject)
                     firstStageCondForSubject = condStage;
                 end
 
-
                 try
                     [nImported, importedFiles] = importMainEEG(SubjName, thisMain, condStage, [-0.05, 0.05]);
                     addLog(['   => Imported [', num2str(nImported), '] epoch(s) as "', condStage, '".']);
 
-                    % Store mapping between imported files and original wave name
                     if nImported > 0 && ~isempty(importedFiles)
                         for i = 1:numel(importedFiles)
                             waveFileMap(importedFiles{i}) = slowBase;
@@ -412,42 +410,53 @@ function main()
                     end
                 catch ME_mainImp
                     addLog(sprintf('ERROR importing main EEG %s: %s.', thisMain, ME_mainImp.message));
-                    % Continue to next file
-                    continue;
                 end
+            end % End mainEEGFiles import loop
 
-                % Overwrite channel if we can find it:
+            % --- Process each unique condition once ---
+            addLog('--- Starting per-condition channel processing ---');
+            for iCond = 1:numel(processedStageConditions)
+                condStage = processedStageConditions{iCond};
+                addLog(sprintf('Processing condition %d/%d: %s', iCond, numel(processedStageConditions), condStage));
+
+                % 1. Overwrite channel file (once per condition)
                 newChanFile = '';
                 try
                     negPeakChanFile = getNegPeakChannelFile(SubjName, condStage);
                     if ~isempty(negPeakChanFile)
                         [nChUsed, newChanFile] = OverwriteChannel(SubjName, negPeakChanFile, userDir);
-                        addLog(['   => Overwrote channels => ', num2str(nChUsed), ' matched']);
+                        addLog(['   => Overwrote channels for "', condStage, '": ', num2str(nChUsed), ' matched']);
                     else
-                        addLog('WARNING:    => No channel file found => skipping OverwriteChannel.');
+                        addLog(['   WARNING: No channel file found for "', condStage, '", skipping OverwriteChannel.']);
                     end
                 catch ME_overwrite
-                     addLog(sprintf('ERROR overwriting channels for %s: %s.', thisMain, ME_overwrite.message));
+                     addLog(sprintf('   ERROR overwriting channels for %s: %s.', condStage, ME_overwrite.message));
                 end
 
-                % Project electrodes to scalp surface
+                % 2. Set bad channels (once per condition)
+                try
+                    mapKey = [SubjName '_' NightName];
+                    if isKey(badChannelMap, mapKey)
+                        set_bad_channel(SubjName, condStage, badChannelMap(mapKey), @addLog);
+                    end
+                catch ME_setbad
+                    addLog(sprintf('   ERROR setting bad channels for %s: %s.', condStage, ME_setbad.message));
+                end
+
+                % 3. Project electrodes to scalp surface (once per condition)
                 try
                     if ~isempty(newChanFile)
                         project_electrodes_to_scalp(SubjName, condStage, newChanFile, @addLog);
-                        addLog('   => Projected electrodes to scalp surface.');
+                        addLog(['   => Projected electrodes to scalp for "', condStage, '".']);
                     else
-                        addLog('WARNING:    => No new channel file from OverwriteChannel => skipping projection.');
+                        addLog(['   WARNING: No new channel file from OverwriteChannel, skipping projection for "', condStage, '".']);
                     end
                 catch ME_project
-                    addLog(sprintf('ERROR projecting electrodes for %s: %s.', thisMain, ME_project.message));
+                    addLog(sprintf('   ERROR projecting electrodes for %s: %s.', condStage, ME_project.message));
                 end
+            end
+            addLog('--- Finished per-condition channel processing ---');
 
-                % Set bad channels for the slow wave data
-                mapKey = [SubjName '_' NightName];
-                if isKey(badChannelMap, mapKey)
-                    set_bad_channel(SubjName, condStage, badChannelMap(mapKey), @addLog);
-                end
-            end % End mainEEGFiles loop
 
             % (D) Compute noise cov for this night => condition=[NightName,'_noise']
             % This is done once per night, using the noise file.
