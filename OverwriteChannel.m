@@ -1,8 +1,9 @@
-function [nChUsed, xyzChanFile] = OverwriteChannel(SubjectName, ThisChanFile, strengthenDir)
+function [nChUsed, xyzChanFile] = OverwriteChannel(SubjectName, ConditionName, ThisChanFile, strengthenDir)
 % Overwrite BST channel coords with a template .xyz
 %
 % INPUTS:
 %   SubjectName   : The subject name in Brainstorm
+%   ConditionName : The specific condition to apply the new channel file to
 %   ThisChanFile  : The relative Brainstorm channel file path
 %   strengthenDir : The top-level STRENGTHEN folder (for "Assets/256_net_temp.xyz")
 %
@@ -87,10 +88,10 @@ function [nChUsed, xyzChanFile] = OverwriteChannel(SubjectName, ThisChanFile, st
 
     %% 5) Re-import the _reduced.xyz into Brainstorm
     bst_report('Start', []);
-    % Select all data files in the subject's folder to apply the new channel file
+    % Select data files ONLY from the specified condition
     sFiles = bst_process('CallProcess', 'process_select_files_data', [], [], ...
         'subjectname', SubjectName, ...
-        'condition',   '', ...
+        'condition',   ConditionName, ...
         'tag',         '', ...
         'includebad',  0, ...
         'includeintra',0, ...
