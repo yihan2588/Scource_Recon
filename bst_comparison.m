@@ -99,6 +99,32 @@ function bst_comparison()
     gui_brainstorm('SetCurrentProtocol', iProtocol);
     addLog(['Selected protocol: ', selectedProtocolName]);
 
+    % --- Ask user for processing mode ---
+    disp(' ');
+    disp('Select processing mode:');
+    disp('1: Source space only');
+    disp('2: Sensor space only');
+    disp('3: Both');
+    modeChoice = -1;
+    while ~ismember(modeChoice, [1, 2, 3])
+        try
+            modeChoiceStr = input('Enter your choice (1-3) [3]: ', 's');
+            if isempty(modeChoiceStr)
+                modeChoiceStr = '3';
+            end
+            modeChoice = str2double(modeChoiceStr);
+            if ~ismember(modeChoice, [1, 2, 3])
+                disp('Invalid choice. Please enter 1, 2, or 3.');
+            end
+        catch
+            disp('Invalid choice. Please enter 1, 2, or 3.');
+        end
+    end
+
+    do_source = ismember(modeChoice, [1, 3]);
+    do_sensor = ismember(modeChoice, [2, 3]);
+    addLog(sprintf('Processing mode set: Source=%d, Sensor=%d', do_source, do_sensor));
+
     % --- Get Subjects and Nights from Protocol ---
     dataDir = fullfile(DbDir, selectedProtocolName, 'data');
     dirContents = dir(dataDir);
@@ -150,8 +176,9 @@ function bst_comparison()
             % Define a base output directory
             baseOutputDir = fullfile(strengthenDir, 'contact_sheet_stages_comparison', SubjName, NightName);
 
-            % --- Step 1: Average sLORETA results for each stage ---
-            addLog('Step 1: Averaging sLORETA results...');
+            if do_source
+                % --- Step 1: Average sLORETA results for each stage ---
+                addLog('Step 1: Averaging sLORETA results...');
             for iStage = 1:numel(stages)
                 stage = stages{iStage};
                 condition = [NightName, '_', stage];
@@ -234,9 +261,11 @@ function bst_comparison()
                     addLog(sprintf('   ERROR: Failed to create comparison condition: %s', comp_name));
                 end
             end
-            
-            % --- Sensor Space Analysis ---
-            addLog('--- Starting Sensor Space (2D Topography) Analysis ---');
+            end
+
+            if do_sensor
+                % --- Sensor Space Analysis ---
+                addLog('--- Starting Sensor Space (2D Topography) Analysis ---');
             % Step 4: Average raw data for each stage
             addLog('Step 4: Averaging raw sensor data...');
             for iStage = 1:numel(stages)
@@ -265,6 +294,7 @@ function bst_comparison()
                 sFileB_cell = {sFileB_struct(1).FileName};
                 bst_process('CallProcess', 'process_matlab_eval2', sFileA_cell, sFileB_cell, 'matlab', ['Data = 100 * (DataA - DataB) ./ DataB;' 10 'Condition = ''' comp_name_sensor ''';']);
             end
+            end
         end % End night loop
     end % End subject loop
 
@@ -291,9 +321,12 @@ function bst_comparison()
             
             stages = {'pre-stim', 'stim', 'post-stim'};
             baseOutputDir = fullfile(strengthenDir, 'contact_sheet_stages_comparison', SubjName, NightName);
-            orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
             
-            source_stage_results = {};
+            if do_source
+                addLog('... generating source screenshots');
+                orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
+                
+                source_stage_results = {};
             for iStage = 1:numel(stages)
                 sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', [NightName, '_', stages{iStage}], 'tag', [stages{iStage}, '_avg']);
                 if ~isempty(sResult), source_stage_results{end+1} = sResult; end
@@ -306,8 +339,11 @@ function bst_comparison()
 
             process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, [], 0.3, []);
             process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, '%', 0, 300);
+            end
 
-            sensor_stage_results = {};
+            if do_sensor
+                addLog('... generating sensor screenshots');
+                sensor_stage_results = {};
             for iStage = 1:numel(stages)
                 sResult = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', [NightName, '_', stages{iStage}], 'tag', [stages{iStage}, '_sensor_avg']);
                 if ~isempty(sResult), sensor_stage_results{end+1} = sResult; end
@@ -320,6 +356,7 @@ function bst_comparison()
 
             process_screenshot_group(sensor_stage_results, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, [], []);
             process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%', 300);
+            end
         end
     end
 
