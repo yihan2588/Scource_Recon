@@ -235,56 +235,22 @@ function bst_comparison()
                 end
             end
             
-            % --- Step 3: Take Source Screenshots with Standardized Colormaps ---
-            addLog('Step 3: Generating source contact sheet screenshots...');
-            orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
-            
-            % Get handles for the two groups of files
-            source_stage_results = {};
-            for iStage = 1:numel(stages)
-                sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', [NightName, '_', stages{iStage}], 'tag', [stages{iStage}, '_avg']);
-                if ~isempty(sResult)
-                    source_stage_results{end+1} = sResult;
-                end
-            end
-            source_comparison_results = {};
-            for iComp = 1:numel(comparison_results)
-                if ~isempty(comparison_results{iComp})
-                    source_comparison_results{end+1} = comparison_results{iComp};
-                end
-            end
-
-            % Process Source Stages
-            process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, [], 0.3);
-            % Process Source Comparisons
-            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, false, '%', 0);
-
-
-            % =================================================================================
-            % === SENSOR SPACE (2D TOPOGRAPHY) ANALYSIS
-            % =================================================================================
+            % --- Sensor Space Analysis ---
             addLog('--- Starting Sensor Space (2D Topography) Analysis ---');
-
-            % --- Step 4: Average raw data for each stage ---
+            % Step 4: Average raw data for each stage
             addLog('Step 4: Averaging raw sensor data...');
             for iStage = 1:numel(stages)
                 stage = stages{iStage};
                 condition = [NightName, '_', stage];
                 avg_tag = [stage, '_sensor_avg'];
-                addLog(sprintf('Averaging sensor data for stage: %s', stage));
                 sFiles_select = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', condition);
-                if isempty(sFiles_select)
-                    addLog(sprintf('WARNING: No data files found for %s. Skipping sensor averaging.', condition));
-                    continue;
-                end
+                if isempty(sFiles_select), continue; end
                 sFiles_avg = bst_process('CallProcess', 'process_average', sFiles_select, [], 'avgtype', 1, 'avg_func', 1, 'weighted', 0);
                 bst_process('CallProcess', 'process_add_tag', sFiles_avg, [], 'tag', avg_tag, 'output', 'name');
-                addLog(sprintf('   => Created sensor average file with tag: %s', avg_tag));
             end
 
-            % --- Step 5: Perform Sensor Space Comparisons ---
+            % Step 5: Perform Sensor Space Comparisons
             addLog('Step 5: Performing sensor space relative difference comparisons...');
-            sensor_comparison_results = {};
             for iComp = 1:numel(comparisons)
                 comp_pair = comparisons{iComp};
                 comp_name_sensor = [comp_pair{3}, '_sensor'];
@@ -292,90 +258,160 @@ function bst_comparison()
                 condB = [NightName, '_', comp_pair{2}];
                 tagA = [comp_pair{1}, '_sensor_avg'];
                 tagB = [comp_pair{2}, '_sensor_avg'];
-                addLog(sprintf('Comparing (sensor): %s', comp_name_sensor));
                 sFileA_struct = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', condA, 'tag', tagA);
                 sFileB_struct = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', condB, 'tag', tagB);
-                if isempty(sFileA_struct) || isempty(sFileB_struct)
-                    addLog(sprintf('WARNING: Could not find one or both sensor avg files for comparison %s. Skipping.', comp_name_sensor));
-                    sensor_comparison_results{iComp} = [];
-                    continue;
-                end
+                if isempty(sFileA_struct) || isempty(sFileB_struct), continue; end
                 sFileA_cell = {sFileA_struct(1).FileName};
                 sFileB_cell = {sFileB_struct(1).FileName};
-                sNewResult = bst_process('CallProcess', 'process_matlab_eval2', sFileA_cell, sFileB_cell, 'matlab', ['Data = 100 * (DataA - DataB) ./ DataB;' 10 'Condition = ''' comp_name_sensor ''';']);
-                sensor_comparison_results{iComp} = sNewResult;
-                if ~isempty(sNewResult)
-                    addLog(sprintf('   => Created sensor comparison condition: %s', comp_name_sensor));
-                else
-                    addLog(sprintf('   ERROR: Failed to create sensor comparison condition: %s', comp_name_sensor));
+                bst_process('CallProcess', 'process_matlab_eval2', sFileA_cell, sFileB_cell, 'matlab', ['Data = 100 * (DataA - DataB) ./ DataB;' 10 'Condition = ''' comp_name_sensor ''';']);
+            end
+        end % End night loop
+    end % End subject loop
+
+    % --- Global Max Calculation Pass ---
+    addLog('--- Calculating global maximums for colormaps ---');
+    global_source_comparison_max = -inf;
+    global_sensor_comparison_max = -inf;
+    
+    comparisons = {
+        {'stim', 'pre-stim', 'Stim_vs_Pre'}, ...
+        {'post-stim', 'stim', 'Post_vs_Stim'}, ...
+        {'post-stim', 'pre-stim', 'Post_vs_Pre'}  ...
+    };
+
+    for iSubj = 1:numel(SubjectNames)
+        SubjName = SubjectNames{iSubj};
+        subjDir = fullfile(dataDir, SubjName);
+        condDirContents = dir(subjDir);
+        condDirs = condDirContents([condDirContents.isdir] & ~startsWith({condDirContents.name}, {'.', '@'}));
+        condNames = {condDirs.name};
+        condNamesForNightDetection = condNames(~contains(condNames, '_vs_'));
+        nightNames = {};
+        for iCond = 1:numel(condNamesForNightDetection)
+            parts = strsplit(condNamesForNightDetection{iCond}, '_');
+            if numel(parts) > 1, nightNames{end+1} = parts{1}; end
+        end
+        uniqueNightNames = unique(nightNames);
+
+        for iNight = 1:numel(uniqueNightNames)
+            for iComp = 1:numel(comparisons)
+                comp_name = comparisons{iComp}{3};
+                sFiles = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', comp_name);
+                if ~isempty(sFiles)
+                    bst_file = in_bst_results(sFiles(1).FileName, 0);
+                    data = bst_file.ImageGridAmp;
+                    global_source_comparison_max = max(global_source_comparison_max, max(abs(data(:))));
                 end
             end
+            for iComp = 1:numel(comparisons)
+                comp_name_sensor = [comparisons{iComp}{3}, '_sensor'];
+                sFiles = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', comp_name_sensor);
+                if ~isempty(sFiles)
+                    bst_file = in_bst_data(sFiles(1).FileName);
+                    data = bst_file.F;
+                    global_sensor_comparison_max = max(global_sensor_comparison_max, max(abs(data(:))));
+                end
+            end
+        end
+    end
+    addLog(sprintf('Global SOURCE comparison max set to: %f', global_source_comparison_max));
+    addLog(sprintf('Global SENSOR comparison max set to: %f', global_sensor_comparison_max));
 
-            % --- Step 6: Take 2D Topography Screenshots with Standardized Colormaps ---
-            addLog('Step 6: Generating 2D topography contact sheets...');
+    % --- Screenshot Loop ---
+    addLog('--- Generating all screenshots with global colormaps ---');
+    for iSubj = 1:numel(SubjectNames)
+        SubjName = SubjectNames{iSubj};
+        addLog(sprintf('--- Generating screenshots for Subject: %s ---', SubjName));
+        subjDir = fullfile(dataDir, SubjName);
+        condDirContents = dir(subjDir);
+        condDirs = condDirContents([condDirContents.isdir] & ~startsWith({condDirContents.name}, {'.', '@'}));
+        condNames = {condDirs.name};
+        condNamesForNightDetection = condNames(~contains(condNames, '_vs_'));
+        nightNames = {};
+        for iCond = 1:numel(condNamesForNightDetection)
+            parts = strsplit(condNamesForNightDetection{iCond}, '_');
+            if numel(parts) > 1, nightNames{end+1} = parts{1}; end
+        end
+        uniqueNightNames = unique(nightNames);
+
+        for iNight = 1:numel(uniqueNightNames)
+            NightName = uniqueNightNames{iNight};
+            addLog(sprintf('... Night: %s', NightName));
             
-            % Get handles for the two groups of files
+            stages = {'pre-stim', 'stim', 'post-stim'};
+            baseOutputDir = fullfile(strengthenDir, 'contact_sheet_stages_comparison', SubjName, NightName);
+            orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
+            
+            source_stage_results = {};
+            for iStage = 1:numel(stages)
+                sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', [NightName, '_', stages{iStage}], 'tag', [stages{iStage}, '_avg']);
+                if ~isempty(sResult), source_stage_results{end+1} = sResult; end
+            end
+            source_comparison_results = {};
+            for iComp = 1:numel(comparisons)
+                sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', comparisons{iComp}{3});
+                if ~isempty(sResult), source_comparison_results{end+1} = sResult; end
+            end
+
+            process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, [], 0.3, []);
+            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, false, '%', 0, global_source_comparison_max);
+
             sensor_stage_results = {};
             for iStage = 1:numel(stages)
                 sResult = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', [NightName, '_', stages{iStage}], 'tag', [stages{iStage}, '_sensor_avg']);
-                if ~isempty(sResult)
-                    sensor_stage_results{end+1} = sResult;
-                end
+                if ~isempty(sResult), sensor_stage_results{end+1} = sResult; end
             end
             sensor_comparison_files = {};
-            for iComp = 1:numel(sensor_comparison_results)
-                if ~isempty(sensor_comparison_results{iComp})
-                    sensor_comparison_files{end+1} = sensor_comparison_results{iComp};
-                end
+            for iComp = 1:numel(comparisons)
+                sResult = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', [comparisons{iComp}{3}, '_sensor']);
+                if ~isempty(sResult), sensor_comparison_files{end+1} = sResult; end
             end
 
-            % Process Sensor Stages
-            process_screenshot_group(sensor_stage_results, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, []);
-            % Process Sensor Comparisons
-            process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%');
-        end % End night loop
-    end % End subject loop
+            process_screenshot_group(sensor_stage_results, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, [], []);
+            process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%', global_sensor_comparison_max);
+        end
+    end
 
     addLog('=== Comparison Pipeline End ===');
     disp(['Cumulative log saved to: ', logName]);
 end
 
 % --- HELPER FUNCTION FOR SCREENSHOTS ---
-function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputDir, SubjName, NightName, orientations, data_field_accessor, use_abs, display_units, dataThreshold)
+function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputDir, SubjName, NightName, orientations, data_field_accessor, use_abs, display_units, dataThreshold, fixed_sym_max)
     if isempty(sFiles_group)
         return;
     end
 
-    % Find global min/max for the group
-    gMin = inf;
-    gMax = -inf;
-    for i = 1:numel(sFiles_group)
-        sFile = sFiles_group{i};
-        if strcmpi(type, 'source')
-            bst_file = in_bst_results(sFile(1).FileName, 0);
-        else % sensor
-            bst_file = in_bst_data(sFile(1).FileName);
+    % If a fixed maximum is provided, use it. Otherwise, calculate from the group.
+    if nargin >= 12 && ~isempty(fixed_sym_max) && isfinite(fixed_sym_max)
+        symMax = fixed_sym_max;
+        gMax = fixed_sym_max; % For the absolute case
+    else
+        % Find min/max for the local group
+        gMin = inf;
+        gMax = -inf;
+        for i = 1:numel(sFiles_group)
+            sFile = sFiles_group{i};
+            if strcmpi(type, 'source')
+                bst_file = in_bst_results(sFile(1).FileName, 0);
+            else % sensor
+                bst_file = in_bst_data(sFile(1).FileName);
+            end
+            data = data_field_accessor(bst_file);
+            if use_abs
+                data = abs(data);
+            end
+            gMin = min(gMin, min(data(:)));
+            gMax = max(gMax, max(data(:)));
         end
-        data = data_field_accessor(bst_file);
-        if use_abs
-            data = abs(data);
+
+        if isinf(gMin) || isinf(gMax)
+            disp(['SKIPPING screenshot group for ' colormap_type ': No data found.']);
+            return;
         end
-        gMin = min(gMin, min(data(:)));
-        gMax = max(gMax, max(data(:)));
-    end
-
-    if isinf(gMin) || isinf(gMax)
-        disp(['SKIPPING screenshot group for ' colormap_type ': No data found.']);
-        return;
-    end
-    
-    % Determine symmetric max for non-absolute scales
-    symMax = max(abs([gMin, gMax]));
-
-    % For source comparisons (which are not absolute), hardcode the colormap range to +/- 200%
-    is_source_comparison = strcmpi(type, 'source') && ~use_abs;
-    if is_source_comparison
-        symMax = 200;
+        
+        % Determine symmetric max for non-absolute scales
+        symMax = max(abs([gMin, gMax]));
     end
 
     % Loop through files to take screenshots
