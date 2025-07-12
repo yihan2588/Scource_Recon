@@ -268,57 +268,8 @@ function bst_comparison()
         end % End night loop
     end % End subject loop
 
-    % --- Global Max Calculation Pass ---
-    addLog('--- Calculating global maximums for colormaps ---');
-    global_source_comparison_max = -inf;
-    global_sensor_comparison_max = -inf;
-    
-    comparisons = {
-        {'stim', 'pre-stim', 'Stim_vs_Pre'}, ...
-        {'post-stim', 'stim', 'Post_vs_Stim'}, ...
-        {'post-stim', 'pre-stim', 'Post_vs_Pre'}  ...
-    };
-
-    for iSubj = 1:numel(SubjectNames)
-        SubjName = SubjectNames{iSubj};
-        subjDir = fullfile(dataDir, SubjName);
-        condDirContents = dir(subjDir);
-        condDirs = condDirContents([condDirContents.isdir] & ~startsWith({condDirContents.name}, {'.', '@'}));
-        condNames = {condDirs.name};
-        condNamesForNightDetection = condNames(~contains(condNames, '_vs_'));
-        nightNames = {};
-        for iCond = 1:numel(condNamesForNightDetection)
-            parts = strsplit(condNamesForNightDetection{iCond}, '_');
-            if numel(parts) > 1, nightNames{end+1} = parts{1}; end
-        end
-        uniqueNightNames = unique(nightNames);
-
-        for iNight = 1:numel(uniqueNightNames)
-            for iComp = 1:numel(comparisons)
-                comp_name = comparisons{iComp}{3};
-                sFiles = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', comp_name);
-                if ~isempty(sFiles)
-                    bst_file = in_bst_results(sFiles(1).FileName, 0);
-                    data = bst_file.ImageGridAmp;
-                    global_source_comparison_max = max(global_source_comparison_max, max(abs(data(:))));
-                end
-            end
-            for iComp = 1:numel(comparisons)
-                comp_name_sensor = [comparisons{iComp}{3}, '_sensor'];
-                sFiles = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', SubjName, 'condition', comp_name_sensor);
-                if ~isempty(sFiles)
-                    bst_file = in_bst_data(sFiles(1).FileName);
-                    data = bst_file.F;
-                    global_sensor_comparison_max = max(global_sensor_comparison_max, max(abs(data(:))));
-                end
-            end
-        end
-    end
-    addLog(sprintf('Global SOURCE comparison max set to: %f', global_source_comparison_max));
-    addLog(sprintf('Global SENSOR comparison max set to: %f', global_sensor_comparison_max));
-
     % --- Screenshot Loop ---
-    addLog('--- Generating all screenshots with global colormaps ---');
+    addLog('--- Generating all screenshots with hardcoded colormaps for comparisons ---');
     for iSubj = 1:numel(SubjectNames)
         SubjName = SubjectNames{iSubj};
         addLog(sprintf('--- Generating screenshots for Subject: %s ---', SubjName));
@@ -354,7 +305,7 @@ function bst_comparison()
             end
 
             process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, [], 0.3, []);
-            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, '%', 0, global_source_comparison_max);
+            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, '%', 0, 300);
 
             sensor_stage_results = {};
             for iStage = 1:numel(stages)
@@ -368,7 +319,7 @@ function bst_comparison()
             end
 
             process_screenshot_group(sensor_stage_results, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, [], []);
-            process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%', global_sensor_comparison_max);
+            process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%', 300);
         end
     end
 
