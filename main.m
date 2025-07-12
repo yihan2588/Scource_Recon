@@ -357,16 +357,11 @@ function main()
             addLog(sprintf('SourceRecon=%s', sourceReconDir));
 
             % (B) Import noise EEG => condition = [NightName, '_noise']
+            condNoise = ''; % Initialize
             try
                 condNoise = [NightName, '_noise'];
                 importNoiseEEG(SubjName, noiseEEGFile, condNoise); % Import entire duration
                 addLog(['   => Noise EEG imported => ', noiseEEGFile]);
-
-                % Set bad channels for the noise data
-                mapKey = [SubjName '_' NightName];
-                if isKey(badChannelMap, mapKey)
-                    set_bad_channel(SubjName, condNoise, badChannelMap(mapKey), @addLog);
-                end
             catch ME_noiseImp
                  addLog(sprintf('ERROR importing noise EEG for %s/%s: %s.', SubjName, NightName, ME_noiseImp.message));
                  % Decide whether to continue night processing
@@ -413,49 +408,63 @@ function main()
                 end
             end % End mainEEGFiles import loop
 
-            % --- Process each unique condition once ---
-            addLog('--- Starting per-condition channel processing ---');
-            for iCond = 1:numel(processedStageConditions)
-                condStage = processedStageConditions{iCond};
-                addLog(sprintf('Processing condition %d/%d: %s', iCond, numel(processedStageConditions), condStage));
+            % --- UNIFIED CHANNEL PROCESSING (NOISE + STAGES) ---
+            addLog('--- Starting unified per-condition channel processing ---');
+            
+            % Combine noise and stage conditions into one list for processing
+            allConditionsForNight = {};
+            if ~isempty(condNoise)
+                allConditionsForNight{end+1} = condNoise;
+            end
+            allConditionsForNight = [allConditionsForNight, processedStageConditions];
+            
+            for iCond = 1:numel(allConditionsForNight)
+                currentCond = allConditionsForNight{iCond};
+                addLog(sprintf('--- Processing channels for condition %d/%d: %s ---', iCond, numel(allConditionsForNight), currentCond));
 
-                % 1. Overwrite channel file (once per condition)
-                newChanFile = '';
+                % 1. Overwrite channel file (standardizes names and locations)
+                newChanFile = ''; % This will hold the path to the *new* channel.mat
                 try
-                    negPeakChanFile = getNegPeakChannelFile(SubjName, condStage);
-                    if ~isempty(negPeakChanFile)
-                        [nChUsed, newChanFile] = OverwriteChannel(SubjName, negPeakChanFile, userDir);
-                        addLog(['   => Overwrote channels for "', condStage, '": ', num2str(nChUsed), ' matched']);
+                    originalChanFile = getNegPeakChannelFile(SubjName, currentCond);
+                    if ~isempty(originalChanFile)
+                        % OverwriteChannel now returns the path to the new channel file
+                        [nChUsed, newChanFile] = OverwriteChannel(SubjName, currentCond, originalChanFile, userDir);
+                        addLog(sprintf('   1. Overwrote channels for "%s": %d matched. New channel file: %s', currentCond, nChUsed, newChanFile));
                     else
-                        addLog(['   WARNING: No channel file found for "', condStage, '", skipping OverwriteChannel.']);
+                        addLog(sprintf('   WARNING: No channel file found for "%s", skipping all channel processing.', currentCond));
+                        continue; % Skip to next condition if no channels to process
                     end
                 catch ME_overwrite
-                     addLog(sprintf('   ERROR overwriting channels for %s: %s.', condStage, ME_overwrite.message));
+                     addLog(sprintf('   ERROR overwriting channels for %s: %s.', currentCond, ME_overwrite.message));
+                     continue; % Skip to next condition on error
                 end
 
-                % 2. Set bad channels (once per condition)
+                % 2. Set bad channels (using standardized names)
                 try
                     mapKey = [SubjName '_' NightName];
                     if isKey(badChannelMap, mapKey)
-                        set_bad_channel(SubjName, condStage, badChannelMap(mapKey), @addLog);
+                        set_bad_channel(SubjName, currentCond, badChannelMap(mapKey), @addLog);
+                        addLog(sprintf('   2. Set bad channels for "%s".', currentCond));
+                    else
+                        addLog(sprintf('   2. No bad channels defined for this night. Skipping bad channel setting for "%s".', currentCond));
                     end
                 catch ME_setbad
-                    addLog(sprintf('   ERROR setting bad channels for %s: %s.', condStage, ME_setbad.message));
+                    addLog(sprintf('   ERROR setting bad channels for %s: %s.', currentCond, ME_setbad.message));
                 end
 
-                % 3. Project electrodes to scalp surface (once per condition)
+                % 3. Project electrodes to scalp surface (using the new channel file)
                 try
                     if ~isempty(newChanFile)
-                        project_electrodes_to_scalp(SubjName, condStage, newChanFile, @addLog);
-                        addLog(['   => Projected electrodes to scalp for "', condStage, '".']);
+                        project_electrodes_to_scalp(SubjName, currentCond, newChanFile, @addLog);
+                        addLog(sprintf('   3. Projected electrodes to scalp for "%s".', currentCond));
                     else
-                        addLog(['   WARNING: No new channel file from OverwriteChannel, skipping projection for "', condStage, '".']);
+                        addLog(sprintf('   WARNING: No new channel file from OverwriteChannel, skipping projection for "%s".', currentCond));
                     end
                 catch ME_project
-                    addLog(sprintf('   ERROR projecting electrodes for %s: %s.', condStage, ME_project.message));
+                    addLog(sprintf('   ERROR projecting electrodes for %s: %s.', currentCond, ME_project.message));
                 end
             end
-            addLog('--- Finished per-condition channel processing ---');
+            addLog('--- Finished unified per-condition channel processing ---');
 
 
             % (D) Compute noise cov for this night => condition=[NightName,'_noise']
