@@ -355,7 +355,7 @@ function bst_comparison()
             end
 
             process_screenshot_group(sensor_stage_results, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, [], []);
-            process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%', 300);
+            process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%', [], 300);
             end
         end
     end
