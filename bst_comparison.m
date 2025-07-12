@@ -354,7 +354,7 @@ function bst_comparison()
             end
 
             process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, [], 0.3, []);
-            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, false, '%', 0, global_source_comparison_max);
+            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, '%', 0, global_source_comparison_max);
 
             sensor_stage_results = {};
             for iStage = 1:numel(stages)
