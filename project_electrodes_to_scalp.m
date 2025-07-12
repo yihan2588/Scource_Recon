@@ -47,52 +47,17 @@ function project_electrodes_to_scalp(SubjectName, ConditionName, channelFilePath
     ChannelMat = in_bst_channel(channelFullPath);
     ChanLoc = ChannelMat.Channel;
     
-    % Validate channel locations
-    validChannels = [];
-    for iChan = 1:length(ChanLoc)
-        if isfield(ChanLoc(iChan), 'Loc') && ~isempty(ChanLoc(iChan).Loc) && numel(ChanLoc(iChan).Loc) == 3
-            validChannels(end+1) = iChan;
-        else
-            addLog(sprintf('WARNING: Channel %d (%s) has invalid or missing location data.', iChan, ChanLoc(iChan).Name));
-        end
-    end
-    
-    if isempty(validChannels)
-        addLog('ERROR: No valid channel locations found. Cannot proceed with projection.');
-        return;
-    end
-    
     % Extract just the .Loc field for the projection function
-    InitialChanLoc = zeros(length(validChannels), 3);
-    for idx = 1:length(validChannels)
-        iChan = validChannels(idx);
-        loc = ChanLoc(iChan).Loc;
-        % Ensure we have a row vector for the projection function
-        if size(loc, 1) == 3 && size(loc, 2) == 1
-            InitialChanLoc(idx, :) = loc';  % Convert column to row
-        elseif size(loc, 1) == 1 && size(loc, 2) == 3
-            InitialChanLoc(idx, :) = loc;   % Already a row vector
-        else
-            addLog(sprintf('WARNING: Unexpected dimension for channel %d location: %dx%d', iChan, size(loc, 1), size(loc, 2)));
-        end
-    end
-    addLog(sprintf('Loaded %d valid channel locations out of %d total channels.', length(validChannels), length(ChanLoc)));
+    InitialChanLoc = vertcat(ChanLoc.Loc);
+    addLog(sprintf('Loaded %d channel locations.', size(InitialChanLoc, 1)));
 
     % --- 3. Call the Projection Function ---
     ProjectedChanLoc = channel_project_scalp(Vertices, InitialChanLoc);
     addLog('Completed projection of electrodes onto scalp surface.');
 
     % --- 4. Update the ChannelMat Structure ---
-    % Only update the valid channels that were projected
-    for idx = 1:length(validChannels)
-        iChan = validChannels(idx);
-        % Convert row vector to column vector (Brainstorm expects 3x1 column vectors)
-        if size(ProjectedChanLoc, 2) == 3
-            ChanLoc(iChan).Loc = ProjectedChanLoc(idx, :)';  % Transpose to column vector
-        else
-            addLog(sprintf('WARNING: Unexpected dimension for channel %d projection result.', iChan));
-            ChanLoc(iChan).Loc = ProjectedChanLoc(idx, :);
-        end
+    for iChan = 1:length(ChanLoc)
+        ChanLoc(iChan).Loc = ProjectedChanLoc(iChan, :);
     end
     ChannelMat.Channel = ChanLoc;
 
