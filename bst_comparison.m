@@ -257,7 +257,7 @@ function bst_comparison()
             % Process Source Stages
             process_screenshot_group(source_stage_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, [], 0.3);
             % Process Source Comparisons
-            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, true, [], 0);
+            process_screenshot_group(source_comparison_results, 'source', 'source', baseOutputDir, SubjName, NightName, orientations, @(s) s.ImageGridAmp, false, '%', 0);
 
 
             % =================================================================================
@@ -371,6 +371,12 @@ function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputD
     
     % Determine symmetric max for non-absolute scales
     symMax = max(abs([gMin, gMax]));
+
+    % For source comparisons (which are not absolute), hardcode the colormap range to +/- 200%
+    is_source_comparison = strcmpi(type, 'source') && ~use_abs;
+    if is_source_comparison
+        symMax = 200;
+    end
 
     % Loop through files to take screenshots
     for i = 1:numel(sFiles_group)
