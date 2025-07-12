@@ -371,9 +371,12 @@ function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputD
     end
 
     % If a fixed maximum is provided, use it. Otherwise, calculate from the group.
-    if nargin >= 12 && ~isempty(fixed_sym_max) && isfinite(fixed_sym_max)
+    if strcmpi(type, 'sensor') && nargin >= 12 && ~isempty(fixed_sym_max) && isfinite(fixed_sym_max)
         symMax = fixed_sym_max;
-        gMax = fixed_sym_max; % For the absolute case
+        gMax = fixed_sym_max;
+    elseif nargin >= 12 && ~isempty(fixed_sym_max) && isfinite(fixed_sym_max)
+        symMax = fixed_sym_max;
+        gMax = fixed_sym_max;
     else
         % Find min/max for the local group
         gMin = inf;
