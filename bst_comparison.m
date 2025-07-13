@@ -172,45 +172,6 @@ function bst_comparison()
     SubjectNames = SubjectNames(selectedIndices); % Overwrite the list with the selected subjects
     addLog(sprintf('Selected %d subjects to process: %s', numel(SubjectNames), strjoin(SubjectNames, ', ')));
 
-    % --- Assign subjects to groups if multiple are selected ---
-    activeSubjects = {};
-    shamSubjects = {};
-    if numel(SubjectNames) > 1
-        disp(' ');
-        disp('--- Assign Subjects to Treatment Groups ---');
-        disp('The following subjects were selected for processing:');
-        for i = 1:numel(SubjectNames)
-            disp([num2str(i) ': ' SubjectNames{i}]);
-        end
-        
-        activeIndices = [];
-        while isempty(activeIndices)
-            try
-                choiceStr = input('Enter numbers for ACTIVE group subjects (e.g., 1,3): ', 's');
-                if isempty(choiceStr)
-                    error('Input cannot be empty.');
-                end
-                activeIndices = str2num(choiceStr); %#ok<ST2NM>
-                if any(activeIndices < 1) || any(activeIndices > numel(SubjectNames)) || any(floor(activeIndices) ~= activeIndices)
-                    disp('Invalid selection. Please enter valid numbers from the list.');
-                    activeIndices = [];
-                end
-            catch ME
-                disp(['Invalid input format: ' ME.message]);
-                activeIndices = [];
-            end
-        end
-        
-        allIndices = 1:numel(SubjectNames);
-        shamIndices = setdiff(allIndices, activeIndices);
-        
-        activeSubjects = SubjectNames(activeIndices);
-        shamSubjects = SubjectNames(shamIndices);
-        
-        addLog(sprintf('Active Group: %s', strjoin(activeSubjects, ', ')));
-        addLog(sprintf('Sham Group: %s', strjoin(shamSubjects, ', ')));
-    end
-
 
     % --- Main Loop ---
     for iSubj = 1:numel(SubjectNames)
@@ -234,6 +195,50 @@ function bst_comparison()
         end
         uniqueNightNames = unique(nightNames);
         addLog(sprintf('Found nights for %s: %s', SubjName, strjoin(uniqueNightNames, ', ')));
+
+        % --- Allow user to select nights for the current subject ---
+        if ~isempty(uniqueNightNames)
+            processAllNights = [];
+            while isempty(processAllNights)
+                choiceStr = input(sprintf('Process all conditions for subject %s? (y/n) [y]: ', SubjName), 's');
+                if isempty(choiceStr) || strcmpi(choiceStr, 'y')
+                    processAllNights = true;
+                elseif strcmpi(choiceStr, 'n')
+                    processAllNights = false;
+                else
+                    disp('Invalid input. Please enter y or n.');
+                end
+            end
+
+            if ~processAllNights
+                disp(' ');
+                disp(['=== Available Conditions for ' SubjName ' ===']);
+                for i = 1:numel(uniqueNightNames)
+                    disp([num2str(i) ': ' uniqueNightNames{i}]);
+                end
+                
+                selectedNightIndices = [];
+                while isempty(selectedNightIndices)
+                    try
+                        choiceStr = input('Enter condition numbers to process (e.g., 1,3): ', 's');
+                        if isempty(choiceStr)
+                            error('Input cannot be empty.');
+                        end
+                        selectedNightIndices = str2num(choiceStr); %#ok<ST2NM>
+                        if any(selectedNightIndices < 1) || any(selectedNightIndices > numel(uniqueNightNames)) || any(floor(selectedNightIndices) ~= selectedNightIndices)
+                            disp('Invalid selection. Please enter valid numbers from the list.');
+                            selectedNightIndices = [];
+                        end
+                    catch ME
+                        disp(['Invalid input format: ' ME.message]);
+                        selectedNightIndices = [];
+                    end
+                end
+                uniqueNightNames = uniqueNightNames(selectedNightIndices); % Overwrite with selection
+            end
+        end
+        addLog(sprintf('Processing conditions for %s: %s', SubjName, strjoin(uniqueNightNames, ', ')));
+
 
         for iNight = 1:numel(uniqueNightNames)
             NightName = uniqueNightNames{iNight};
@@ -430,100 +435,6 @@ function bst_comparison()
 
             process_screenshot_group(sensor_stage_results, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, [], []);
             process_screenshot_group(sensor_comparison_files, 'sensor', 'eeg', baseOutputDir, SubjName, NightName, [], @(s) s.F, false, '%', [], 300);
-            end
-        end
-    end
-
-    % --- Group-Level Analysis ---
-    if numel(SubjectNames) > 1 && (~isempty(activeSubjects) || ~isempty(shamSubjects))
-        addLog('--- Starting Group-Level Analysis ---');
-        groups = {'Active', 'Sham'};
-        groupSubjects = {activeSubjects, shamSubjects};
-        
-        % Define file types to average
-        % {is_source, id_type ('tag' or 'cond'), id_string, new_comment}
-        files_to_average = { ...
-            {true,  'tag',  'pre-stim_avg',         'pre-stim_avg_GROUP'}, ...
-            {true,  'tag',  'stim_avg',             'stim_avg_GROUP'}, ...
-            {true,  'tag',  'post-stim_avg',        'post-stim_avg_GROUP'}, ...
-            {true,  'cond', 'Stim_vs_Pre',          'Stim_vs_Pre_GROUP'}, ...
-            {true,  'cond', 'Post_vs_Stim',         'Post_vs_Stim_GROUP'}, ...
-            {true,  'cond', 'Post_vs_Pre',          'Post_vs_Pre_GROUP'}, ...
-            {false, 'tag',  'pre-stim_sensor_avg',  'pre-stim_sensor_avg_GROUP'}, ...
-            {false, 'tag',  'stim_sensor_avg',      'stim_sensor_avg_GROUP'}, ...
-            {false, 'tag',  'post-stim_sensor_avg', 'post-stim_sensor_avg_GROUP'}, ...
-            {false, 'cond', 'Stim_vs_Pre_sensor',   'Stim_vs_Pre_sensor_GROUP'}, ...
-            {false, 'cond', 'Post_vs_Stim_sensor',  'Post_vs_Stim_sensor_GROUP'}, ...
-            {false, 'cond', 'Post_vs_Pre_sensor',   'Post_vs_Pre_sensor_GROUP'} ...
-        };
-
-        for iGroup = 1:numel(groups)
-            groupName = groups{iGroup};
-            subjectsInGroup = groupSubjects{iGroup};
-            groupSubjectName = ['Group_', groupName];
-            
-            if isempty(subjectsInGroup), continue; end
-            addLog(sprintf('--- Averaging results for group: %s ---', groupName));
-
-            for iType = 1:numel(files_to_average)
-                is_source = files_to_average{iType}{1};
-                id_type   = files_to_average{iType}{2};
-                id_string = files_to_average{iType}{3};
-                new_cond  = files_to_average{iType}{4};
-                
-                sFilesInGroup = [];
-                for iSubj = 1:numel(subjectsInGroup)
-                    subj = subjectsInGroup{iSubj};
-                    if is_source
-                        sFile = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', subj, id_type, id_string);
-                    else % sensor
-                        sFile = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', subj, id_type, id_string);
-                    end
-                    if ~isempty(sFile), sFilesInGroup = [sFilesInGroup, sFile]; end
-                end
-                
-                if numel(sFilesInGroup) < numel(subjectsInGroup)
-                    addLog(sprintf('WARNING: Found %d/%d files for "%s" in group %s. Averaging may be incomplete.', numel(sFilesInGroup), numel(subjectsInGroup), id_string, groupName));
-                end
-                if isempty(sFilesInGroup), continue; end
-                
-                sAvg = bst_process('CallProcess', 'process_average', {sFilesInGroup.FileName}, [], 'avgtype', 1, 'avg_func', 1, 'weighted', 0, 'matchrows', 1);
-                bst_process('CallProcess', 'process_set_comment', sAvg, [], 'comment', new_cond);
-                bst_process('CallProcess', 'process_movefile', sAvg, [], 'subjectname', groupSubjectName);
-                addLog(sprintf('Averaged "%s" for group %s and saved to subject %s', id_string, groupName, groupSubjectName));
-            end
-        end
-        
-        % --- Screenshotting for Group Averages ---
-        addLog('--- Generating screenshots for Group Averages ---');
-        for iGroup = 1:numel(groups)
-            groupName = groups{iGroup};
-            groupSubjectName = ['Group_', groupName];
-            if isempty(groupSubjects{iGroup}), continue; end
-            
-            baseOutputDir = fullfile(strengthenDir, 'contact_sheet_stages_comparison', groupSubjectName);
-            
-            % Screenshot source group results if they were processed
-            if do_source
-                addLog(sprintf('... generating source screenshots for group: %s', groupName));
-                orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
-                
-                sGroupStage = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', groupSubjectName, 'tag', '_avg_GROUP');
-                sGroupComp = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', groupSubjectName, 'tag', '_vs_Pre_GROUP');
-                
-                process_screenshot_group(sGroupStage, 'source', 'source', baseOutputDir, groupSubjectName, '', orientations, @(s) s.ImageGridAmp, true, [], 0.3, []);
-                process_screenshot_group(sGroupComp, 'source', 'source', baseOutputDir, groupSubjectName, '', orientations, @(s) s.ImageGridAmp, true, '%', 0, 300);
-            end
-            
-            % Screenshot sensor group results if they were processed
-            if do_sensor
-                addLog(sprintf('... generating sensor screenshots for group: %s', groupName));
-                
-                sGroupStage = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', groupSubjectName, 'tag', '_sensor_avg_GROUP');
-                sGroupComp = bst_process('CallProcess', 'process_select_files_data', [], [], 'subjectname', groupSubjectName, 'tag', '_sensor_GROUP');
-
-                process_screenshot_group(sGroupStage, 'sensor', 'eeg', baseOutputDir, groupSubjectName, '', [], @(s) s.F, false, [], []);
-                process_screenshot_group(sGroupComp, 'sensor', 'eeg', baseOutputDir, groupSubjectName, '', [], @(s) s.F, false, '%', [], 300);
             end
         end
     end
