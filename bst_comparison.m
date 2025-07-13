@@ -38,6 +38,23 @@ function bst_comparison()
 
     addLog('=== Comparison Pipeline Start ===');
 
+    % --- Ask for main execution mode ---
+    disp(' ');
+    disp('Select Execution Mode:');
+    disp('1: Run Full Comparison Pipeline');
+    disp('2: Screenshot a Single Result');
+    execMode = -1;
+    while ~ismember(execMode, [1, 2])
+        try
+            execModeStr = input('Enter your choice (1-2) [1]: ', 's');
+            if isempty(execModeStr), execModeStr = '1'; end
+            execMode = str2double(execModeStr);
+            if ~ismember(execMode, [1, 2]), disp('Invalid choice.'); end
+        catch
+            disp('Invalid input.');
+        end
+    end
+
     % Ensure Brainstorm is running
     if ~brainstorm('status')
         addLog('Brainstorm not running. Starting in nogui mode...');
@@ -47,6 +64,12 @@ function bst_comparison()
     else
         addLog('Brainstorm already running.');
     end
+
+if execMode == 1
+    % =================================================
+    % === MODE 1: FULL COMPARISON PIPELINE
+    % =================================================
+    addLog('Executing Full Comparison Pipeline...');
 
     % --- Protocol Selection ---
     protocolNames = {};
@@ -184,7 +207,7 @@ function bst_comparison()
         condDirs = condDirContents([condDirContents.isdir] & ~startsWith({condDirContents.name}, {'.', '@'}));
         condNames = {condDirs.name};
         % Exclude comparison conditions from previous runs from night detection
-        condNamesForNightDetection = condNames; % MODIFIED: Show all conditions
+        condNamesForNightDetection = condNames(~contains(condNames, '_vs_'));
         
         nightNames = {};
         for iCond = 1:numel(condNamesForNightDetection)
@@ -195,60 +218,6 @@ function bst_comparison()
         end
         uniqueNightNames = unique(nightNames);
         addLog(sprintf('Found nights for %s: %s', SubjName, strjoin(uniqueNightNames, ', ')));
-
-        % --- Allow user to select nights for the current subject ---
-        if ~isempty(uniqueNightNames)
-            processAllNights = [];
-            while isempty(processAllNights)
-                choiceStr = input(sprintf('Process all conditions for subject %s? (y/n) [y]: ', SubjName), 's');
-                if isempty(choiceStr) || strcmpi(choiceStr, 'y')
-                    processAllNights = true;
-                elseif strcmpi(choiceStr, 'n')
-                    processAllNights = false;
-                else
-                    disp('Invalid input. Please enter y or n.');
-                end
-            end
-
-            if ~processAllNights
-                disp(' ');
-                disp(['=== Available Conditions for ' SubjName ' ===']);
-                disp('Note: If selecting a comparison folder (e.g., Stim_vs_Pre), the script will show warnings during data processing, which can be ignored. Screenshots will still be generated.');
-                for i = 1:numel(condNamesForNightDetection)
-                    disp([num2str(i) ': ' condNamesForNightDetection{i}]);
-                end
-                
-                selectedNightIndices = [];
-                while isempty(selectedNightIndices)
-                    try
-                        choiceStr = input('Enter condition numbers to process (e.g., 1,3): ', 's');
-                        if isempty(choiceStr)
-                            error('Input cannot be empty.');
-                        end
-                        selectedNightIndices = str2num(choiceStr); %#ok<ST2NM>
-                        if any(selectedNightIndices < 1) || any(selectedNightIndices > numel(condNamesForNightDetection)) || any(floor(selectedNightIndices) ~= selectedNightIndices)
-                            disp('Invalid selection. Please enter valid numbers from the list.');
-                            selectedNightIndices = [];
-                        end
-                    catch ME
-                        disp(['Invalid input format: ' ME.message]);
-                        selectedNightIndices = [];
-                    end
-                end
-                % The user selected from the full list of conditions.
-                % We now overwrite condNamesForNightDetection with the selection.
-                condNamesForNightDetection = condNamesForNightDetection(selectedNightIndices);
-                % Now, re-derive the uniqueNightNames from this selection for processing.
-                nightNames = {};
-                for iCond = 1:numel(condNamesForNightDetection)
-                    parts = strsplit(condNamesForNightDetection{iCond}, '_');
-                    if numel(parts) > 1, nightNames{end+1} = parts{1}; end
-                end
-                uniqueNightNames = unique(nightNames); % Overwrite with new selection
-            end
-        end
-        addLog(sprintf('Processing conditions for %s: %s', SubjName, strjoin(uniqueNightNames, ', ')));
-
 
         for iNight = 1:numel(uniqueNightNames)
             NightName = uniqueNightNames{iNight};
@@ -451,6 +420,103 @@ function bst_comparison()
 
     addLog('=== Comparison Pipeline End ===');
     disp(['Cumulative log saved to: ', logName]);
+else
+    % =================================================
+    % === MODE 2: SCREENSHOT SINGLE RESULT
+    % =================================================
+    addLog('Executing Screenshot Only Mode...');
+
+    % --- Protocol Selection (reused) ---
+    protocolNames = {};
+    DbDir = bst_get('BrainstormDbDir');
+    if isempty(DbDir) || ~exist(DbDir, 'dir'), addLog('ERROR: Brainstorm DB not found.'); return; end
+    dirContents = dir(DbDir);
+    subDirs = dirContents([dirContents.isdir] & ~ismember({dirContents.name},{'.','..'}));
+    for iDir = 1:length(subDirs)
+        protocolMatPath = fullfile(DbDir, subDirs(iDir).name, 'data', 'protocol.mat');
+        if exist(protocolMatPath, 'file')
+            matData = load(protocolMatPath, 'ProtocolInfo');
+            if isfield(matData, 'ProtocolInfo') && isfield(matData.ProtocolInfo, 'Comment'), protocolNames{end+1} = matData.ProtocolInfo.Comment; end
+        end
+    end
+    if isempty(protocolNames), addLog('ERROR: No protocols found.'); return; end
+    disp('=== Select the Protocol ===');
+    protocolNames = sort(protocolNames);
+    for i = 1:numel(protocolNames), disp([num2str(i) ': ' protocolNames{i}]); end
+    choiceNum = -1;
+    while choiceNum < 1 || choiceNum > numel(protocolNames)
+        try
+            choiceStr = input(['Select protocol number (1-' num2str(numel(protocolNames)) '): '], 's');
+            choiceNum = str2double(choiceStr);
+            if isnan(choiceNum) || floor(choiceNum) ~= choiceNum, choiceNum = -1; disp('Invalid input.'); end
+        catch
+            choiceNum = -1; disp('Invalid input.');
+        end
+    end
+    selectedProtocolName = protocolNames{choiceNum};
+    iProtocol = bst_get('Protocol', selectedProtocolName);
+    gui_brainstorm('SetCurrentProtocol', iProtocol);
+    addLog(['Selected protocol: ', selectedProtocolName]);
+
+    % --- Subject Selection (reused) ---
+    dataDir = fullfile(DbDir, selectedProtocolName, 'data');
+    dirContents = dir(dataDir);
+    subjDirs = dirContents([dirContents.isdir] & ~startsWith({dirContents.name}, {'.', '@'}));
+    SubjectNames = {subjDirs.name};
+    if isempty(SubjectNames), addLog('ERROR: No subjects found.'); return; end
+    disp(' '); disp('=== Select a Subject ===');
+    for i = 1:numel(SubjectNames), disp([num2str(i) ': ' SubjectNames{i}]); end
+    choiceNum = -1;
+    while choiceNum < 1 || choiceNum > numel(SubjectNames)
+        try
+            choiceStr = input(['Select subject number (1-' num2str(numel(SubjectNames)) '): '], 's');
+            choiceNum = str2double(choiceStr);
+            if isnan(choiceNum) || floor(choiceNum) ~= choiceNum, choiceNum = -1; disp('Invalid input.'); end
+        catch
+            choiceNum = -1; disp('Invalid input.');
+        end
+    end
+    SubjName = SubjectNames{choiceNum};
+    addLog(['Selected subject: ', SubjName]);
+
+    % --- Condition/Result Selection ---
+    subjDir = fullfile(dataDir, SubjName);
+    condDirContents = dir(subjDir);
+    condDirs = condDirContents([condDirContents.isdir] & ~startsWith({condDirContents.name}, {'.', '@'}));
+    condNames = {condDirs.name};
+    if isempty(condNames), addLog('ERROR: No conditions found for this subject.'); return; end
+    
+    disp(' '); disp('=== Available Conditions/Results ===');
+    for i = 1:numel(condNames), disp([num2str(i) ': ' condNames{i}]); end
+    choiceNum = -1;
+    while choiceNum < 1 || choiceNum > numel(condNames)
+        try
+            choiceStr = input(['Select condition number (1-' num2str(numel(condNames)) '): '], 's');
+            choiceNum = str2double(choiceStr);
+            if isnan(choiceNum) || floor(choiceNum) ~= choiceNum, choiceNum = -1; disp('Invalid input.'); end
+        catch
+            choiceNum = -1; disp('Invalid input.');
+        end
+    end
+    selectedCondition = condNames{choiceNum};
+    addLog(['Selected condition: ', selectedCondition]);
+
+    % --- Find the result file ---
+    sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', selectedCondition);
+    if isempty(sResult)
+        addLog('ERROR: Could not find a result file in the selected condition. Exiting.');
+        return;
+    end
+    
+    % --- Take Screenshot ---
+    addLog('Generating screenshot...');
+    outputDir = fullfile(strengthenDir, 'single_screenshots', SubjName);
+    if ~exist(outputDir, 'dir'), mkdir(outputDir); end
+    
+    screenshot_single_result(sResult, outputDir);
+    addLog(['Screenshot saved in: ' outputDir]);
+end
+
 end
 
 % --- HELPER FUNCTION FOR SCREENSHOTS ---
@@ -561,4 +627,35 @@ function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputD
     end
     % Restore default colormap behavior
     bst_colormaps('SetMaxMode', colormap_type, 'global');
+end
+
+
+% --- HELPER FUNCTION FOR SINGLE SCREENSHOTS ---
+function screenshot_single_result(sFile, baseOutputDir)
+    orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
+    res_cond_name = sFile(1).Condition;
+    
+    for iOrient = 1:numel(orientations)
+        orientation = orientations{iOrient};
+        outputDir = fullfile(baseOutputDir, orientation);
+        if ~exist(outputDir, 'dir'), mkdir(outputDir); end
+        
+        try
+            outputFileName = fullfile(outputDir, [res_cond_name, '.png']);
+            hFig = script_view_sources(sFile(1).FileName, 'cortex');
+            
+            % Use default colormap settings from Brainstorm
+            bst_colormaps('FireColormapChanged', 'source');
+            
+            figure_3d('SetStandardView', hFig, orientation);
+            hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
+            img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
+            out_image(outputFileName, img);
+            close(hContactFig); close(hFig);
+        catch ME
+            disp(['ERROR generating source screenshot: ' ME.message]);
+            if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
+            if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
+        end
+    end
 end
