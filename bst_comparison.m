@@ -212,37 +212,29 @@ function bst_comparison()
 
             if ~processAllNights
                 disp(' ');
-                disp(['=== Available Conditions for ' SubjName ' ===']);
-                % List all raw condition folders, not just the derived night names
-                for i = 1:numel(condNamesForNightDetection)
-                    disp([num2str(i) ': ' condNamesForNightDetection{i}]);
+                disp(['=== Available Condition Groups (Nights) for ' SubjName ' ===']);
+                for i = 1:numel(uniqueNightNames)
+                    disp([num2str(i) ': ' uniqueNightNames{i}]);
                 end
                 
-                selectedCondIndices = [];
-                while isempty(selectedCondIndices)
+                selectedNightIndices = [];
+                while isempty(selectedNightIndices)
                     try
-                        choiceStr = input('Enter condition numbers to process (e.g., 1,3): ', 's');
+                        choiceStr = input('Enter group numbers to process (e.g., 1,3): ', 's');
                         if isempty(choiceStr)
                             error('Input cannot be empty.');
                         end
-                        selectedCondIndices = str2num(choiceStr); %#ok<ST2NM>
-                        if any(selectedCondIndices < 1) || any(selectedCondIndices > numel(condNamesForNightDetection)) || any(floor(selectedCondIndices) ~= selectedCondIndices)
+                        selectedNightIndices = str2num(choiceStr); %#ok<ST2NM>
+                        if any(selectedNightIndices < 1) || any(selectedNightIndices > numel(uniqueNightNames)) || any(floor(selectedNightIndices) ~= selectedNightIndices)
                             disp('Invalid selection. Please enter valid numbers from the list.');
-                            selectedCondIndices = [];
+                            selectedNightIndices = [];
                         end
                     catch ME
                         disp(['Invalid input format: ' ME.message]);
-                        selectedCondIndices = [];
+                        selectedNightIndices = [];
                     end
                 end
-                % From the selected conditions, re-derive the unique night identifiers to process
-                selectedCondNames = condNamesForNightDetection(selectedCondIndices);
-                newNightNames = {};
-                for iCond = 1:numel(selectedCondNames)
-                    parts = strsplit(selectedCondNames{iCond}, '_');
-                    if numel(parts) > 1, newNightNames{end+1} = parts{1}; end
-                end
-                uniqueNightNames = unique(newNightNames); % Overwrite with new selection
+                uniqueNightNames = uniqueNightNames(selectedNightIndices); % Overwrite with selection
             end
         end
         addLog(sprintf('Processing conditions for %s: %s', SubjName, strjoin(uniqueNightNames, ', ')));
