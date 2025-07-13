@@ -138,6 +138,41 @@ function bst_comparison()
     end
     addLog(sprintf('Found %d subjects in the protocol: %s', numel(SubjectNames), strjoin(SubjectNames, ', ')));
 
+    % --- Allow user to select subjects ---
+    disp(' ');
+    disp('=== Available Subjects ===');
+    for i = 1:numel(SubjectNames)
+        disp([num2str(i) ': ' SubjectNames{i}]);
+    end
+    disp([num2str(numel(SubjectNames) + 1) ': Process All Subjects']);
+    
+    selectedIndices = [];
+    while isempty(selectedIndices)
+        try
+            choiceStr = input(['Enter subject numbers to process (e.g., 1,3,5) or ' num2str(numel(SubjectNames) + 1) ' for all [all]: '], 's');
+            if isempty(choiceStr)
+                choiceStr = num2str(numel(SubjectNames) + 1);
+            end
+            
+            if str2double(choiceStr) == (numel(SubjectNames) + 1)
+                selectedIndices = 1:numel(SubjectNames);
+            else
+                selectedIndices = str2num(choiceStr); %#ok<ST2NM>
+                if any(selectedIndices < 1) || any(selectedIndices > numel(SubjectNames)) || any(floor(selectedIndices) ~= selectedIndices)
+                    disp('Invalid selection. Please enter valid numbers from the list.');
+                    selectedIndices = [];
+                end
+            end
+        catch
+            disp('Invalid input format.');
+            selectedIndices = [];
+        end
+    end
+    
+    SubjectNames = SubjectNames(selectedIndices); % Overwrite the list with the selected subjects
+    addLog(sprintf('Selected %d subjects to process: %s', numel(SubjectNames), strjoin(SubjectNames, ', ')));
+
+
     % --- Main Loop ---
     for iSubj = 1:numel(SubjectNames)
         SubjName = SubjectNames{iSubj};
