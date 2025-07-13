@@ -184,7 +184,7 @@ function bst_comparison()
         condDirs = condDirContents([condDirContents.isdir] & ~startsWith({condDirContents.name}, {'.', '@'}));
         condNames = {condDirs.name};
         % Exclude comparison conditions from previous runs from night detection
-        condNamesForNightDetection = condNames(~contains(condNames, '_vs_'));
+        condNamesForNightDetection = condNames; % MODIFIED: Show all conditions
         
         nightNames = {};
         for iCond = 1:numel(condNamesForNightDetection)
@@ -212,20 +212,21 @@ function bst_comparison()
 
             if ~processAllNights
                 disp(' ');
-                disp(['=== Available Condition Groups (Nights) for ' SubjName ' ===']);
-                for i = 1:numel(uniqueNightNames)
-                    disp([num2str(i) ': ' uniqueNightNames{i}]);
+                disp(['=== Available Conditions for ' SubjName ' ===']);
+                disp('Note: If selecting a comparison folder (e.g., Stim_vs_Pre), the script will show warnings during data processing, which can be ignored. Screenshots will still be generated.');
+                for i = 1:numel(condNamesForNightDetection)
+                    disp([num2str(i) ': ' condNamesForNightDetection{i}]);
                 end
                 
                 selectedNightIndices = [];
                 while isempty(selectedNightIndices)
                     try
-                        choiceStr = input('Enter group numbers to process (e.g., 1,3): ', 's');
+                        choiceStr = input('Enter condition numbers to process (e.g., 1,3): ', 's');
                         if isempty(choiceStr)
                             error('Input cannot be empty.');
                         end
                         selectedNightIndices = str2num(choiceStr); %#ok<ST2NM>
-                        if any(selectedNightIndices < 1) || any(selectedNightIndices > numel(uniqueNightNames)) || any(floor(selectedNightIndices) ~= selectedNightIndices)
+                        if any(selectedNightIndices < 1) || any(selectedNightIndices > numel(condNamesForNightDetection)) || any(floor(selectedNightIndices) ~= selectedNightIndices)
                             disp('Invalid selection. Please enter valid numbers from the list.');
                             selectedNightIndices = [];
                         end
@@ -234,7 +235,16 @@ function bst_comparison()
                         selectedNightIndices = [];
                     end
                 end
-                uniqueNightNames = uniqueNightNames(selectedNightIndices); % Overwrite with selection
+                % The user selected from the full list of conditions.
+                % We now overwrite condNamesForNightDetection with the selection.
+                condNamesForNightDetection = condNamesForNightDetection(selectedNightIndices);
+                % Now, re-derive the uniqueNightNames from this selection for processing.
+                nightNames = {};
+                for iCond = 1:numel(condNamesForNightDetection)
+                    parts = strsplit(condNamesForNightDetection{iCond}, '_');
+                    if numel(parts) > 1, nightNames{end+1} = parts{1}; end
+                end
+                uniqueNightNames = unique(nightNames); % Overwrite with new selection
             end
         end
         addLog(sprintf('Processing conditions for %s: %s', SubjName, strjoin(uniqueNightNames, ', ')));
