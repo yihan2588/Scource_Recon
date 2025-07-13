@@ -178,6 +178,10 @@ function bst_comparison()
     if numel(SubjectNames) > 1
         disp(' ');
         disp('--- Assign Subjects to Treatment Groups ---');
+        disp('The following subjects were selected for processing:');
+        for i = 1:numel(SubjectNames)
+            disp([num2str(i) ': ' SubjectNames{i}]);
+        end
         
         activeIndices = [];
         while isempty(activeIndices)
