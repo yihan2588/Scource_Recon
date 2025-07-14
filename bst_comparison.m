@@ -488,33 +488,48 @@ else
     
     disp(' '); disp('=== Available Conditions/Results ===');
     for i = 1:numel(condNames), disp([num2str(i) ': ' condNames{i}]); end
-    choiceNum = -1;
-    while choiceNum < 1 || choiceNum > numel(condNames)
+    
+    selectedIndices = [];
+    while isempty(selectedIndices)
         try
-            choiceStr = input(['Select condition number (1-' num2str(numel(condNames)) '): '], 's');
-            choiceNum = str2double(choiceStr);
-            if isnan(choiceNum) || floor(choiceNum) ~= choiceNum, choiceNum = -1; disp('Invalid input.'); end
-        catch
-            choiceNum = -1; disp('Invalid input.');
+            choiceStr = input('Enter condition numbers to process (e.g., 1,3,5): ', 's');
+            if isempty(choiceStr)
+                error('Selection cannot be empty.');
+            end
+            selectedIndices = str2num(choiceStr); %#ok<ST2NM>
+            if any(selectedIndices < 1) || any(selectedIndices > numel(condNames)) || any(floor(selectedIndices) ~= selectedIndices)
+                disp('Invalid selection. Please enter valid numbers from the list.');
+                selectedIndices = [];
+            end
+        catch ME
+            disp(['Invalid input format: ' ME.message]);
+            selectedIndices = [];
         end
     end
-    selectedCondition = condNames{choiceNum};
-    addLog(['Selected condition: ', selectedCondition]);
+    
+    selectedConditions = condNames(selectedIndices);
+    addLog(sprintf('Selected conditions: %s', strjoin(selectedConditions, ', ')));
 
-    % --- Find the result file ---
-    sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', selectedCondition);
-    if isempty(sResult)
-        addLog('ERROR: Could not find a result file in the selected condition. Exiting.');
-        return;
+    % --- Loop through selected conditions and take screenshots ---
+    for iCond = 1:numel(selectedConditions)
+        selectedCondition = selectedConditions{iCond};
+        addLog(sprintf('Processing condition %d/%d: %s', iCond, numel(selectedConditions), selectedCondition));
+
+        % Find the result file
+        sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'subjectname', SubjName, 'condition', selectedCondition);
+        if isempty(sResult)
+            addLog(['WARNING: Could not find a result file for condition: ' selectedCondition '. Skipping.']);
+            continue;
+        end
+        
+        % Take Screenshot
+        addLog('Generating screenshot...');
+        outputDir = fullfile(strengthenDir, 'single_screenshots', SubjName);
+        if ~exist(outputDir, 'dir'), mkdir(outputDir); end
+        
+        screenshot_single_result(sResult, outputDir);
+        addLog(['Screenshot saved in: ' outputDir]);
     end
-    
-    % --- Take Screenshot ---
-    addLog('Generating screenshot...');
-    outputDir = fullfile(strengthenDir, 'single_screenshots', SubjName);
-    if ~exist(outputDir, 'dir'), mkdir(outputDir); end
-    
-    screenshot_single_result(sResult, outputDir);
-    addLog(['Screenshot saved in: ' outputDir]);
 end
 
 end
@@ -635,6 +650,10 @@ function screenshot_single_result(sFile, baseOutputDir)
     orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
     res_cond_name = sFile(1).Condition;
     
+    % Load result file meta-data to check if it's absolute
+    bst_file = in_bst_results(sFile(1).FileName, 0);
+    is_absolute = bst_file.isAbsolute;
+
     for iOrient = 1:numel(orientations)
         orientation = orientations{iOrient};
         outputDir = fullfile(baseOutputDir, orientation);
@@ -644,7 +663,12 @@ function screenshot_single_result(sFile, baseOutputDir)
             outputFileName = fullfile(outputDir, [res_cond_name, '.png']);
             hFig = script_view_sources(sFile(1).FileName, 'cortex');
             
-            % Use default colormap settings from Brainstorm
+            % Hardcode colormap to +/- 100
+            if is_absolute
+                bst_colormaps('SetMaxCustom', 'source', '%', 0, 100);
+            else
+                bst_colormaps('SetMaxCustom', 'source', '%', -100, 100);
+            end
             bst_colormaps('FireColormapChanged', 'source');
             
             figure_3d('SetStandardView', hFig, orientation);
