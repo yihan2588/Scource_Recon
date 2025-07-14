@@ -650,9 +650,12 @@ function screenshot_single_result(sFile, baseOutputDir)
     orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
     res_cond_name = sFile(1).Condition;
     
-    % Determine if the result is absolute (average) or relative (comparison)
-    % based on the condition name, then set the colormap appropriately.
     is_absolute = contains(res_cond_name, '_avg');
+
+    % If we are about to change the colormap for relative data, save the current default
+    if ~is_absolute
+        sOldColormap = bst_colormaps('GetColormap', 'source');
+    end
 
     for iOrient = 1:numel(orientations)
         orientation = orientations{iOrient};
@@ -663,10 +666,13 @@ function screenshot_single_result(sFile, baseOutputDir)
             outputFileName = fullfile(outputDir, [res_cond_name, '.png']);
             hFig = script_view_sources(sFile(1).FileName, 'cortex');
             
-            % Hardcode colormap to +/- 100
+            % Set colormap bounds and type
             if is_absolute
+                % For absolute data (_avg), use default sequential colormap with range [0, 100]
                 bst_colormaps('SetMaxCustom', 'source', [], 0, 100);
             else
+                % For relative data (comparisons), force a diverging colormap
+                bst_colormaps('SetColormapName', 'source', 'rwb');
                 bst_colormaps('SetMaxCustom', 'source', [], -100, 100);
             end
             bst_colormaps('FireColormapChanged', 'source');
@@ -681,5 +687,10 @@ function screenshot_single_result(sFile, baseOutputDir)
             if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
             if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
         end
+    end
+
+    % If we changed the colormap for relative data, restore it to avoid side effects
+    if ~is_absolute
+        bst_colormaps('SetColormap', 'source', sOldColormap);
     end
 end
