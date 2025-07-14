@@ -649,48 +649,59 @@ end
 function screenshot_single_result(sFile, baseOutputDir)
     orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
     res_cond_name = sFile(1).Condition;
+
+    % Get the original source colormap to restore it later
+    sOldColormap = bst_colormaps('GetColormap', 'source');
     
-    is_absolute = contains(res_cond_name, '_avg');
+    % Create a temporary colormap configuration
+    sTempColormap = sOldColormap;
+    sTempColormap.isAbsoluteValues = 1; % Force rectified/absolute view
+    sTempColormap.MaxMode = 'custom';
+    sTempColormap.MinValue = 0;
+    sTempColormap.MaxValue = 100;
+    
+    % Apply the temporary settings
+    bst_colormaps('SetColormap', 'source', sTempColormap);
 
-    % If we are about to change the colormap for relative data, save the current default
-    if ~is_absolute
-        sOldColormap = bst_colormaps('GetColormap', 'source');
-    end
-
-    for iOrient = 1:numel(orientations)
-        orientation = orientations{iOrient};
-        outputDir = fullfile(baseOutputDir, orientation);
-        if ~exist(outputDir, 'dir'), mkdir(outputDir); end
-        
-        try
-            outputFileName = fullfile(outputDir, [res_cond_name, '.png']);
-            hFig = script_view_sources(sFile(1).FileName, 'cortex');
+    try
+        for iOrient = 1:numel(orientations)
+            orientation = orientations{iOrient};
+            outputDir = fullfile(baseOutputDir, orientation);
+            if ~exist(outputDir, 'dir'), mkdir(outputDir); end
             
-            % Set colormap bounds and type
-            if is_absolute
-                % For absolute data (_avg), use default sequential colormap with range [0, 100]
-                bst_colormaps('SetMaxCustom', 'source', [], 0, 100);
-            else
-                % For relative data (comparisons), force a diverging colormap
-                bst_colormaps('SetColormapName', 'source', 'rwb');
-                bst_colormaps('SetMaxCustom', 'source', [], -100, 100);
+            hFig = [];
+            hContactFig = [];
+            try
+                outputFileName = fullfile(outputDir, [res_cond_name, '.png']);
+                hFig = script_view_sources(sFile(1).FileName, 'cortex');
+                
+                % The colormap is already configured, just need to update the figure
+                bst_colormaps('FireColormapChanged', 'source');
+                
+                figure_3d('SetStandardView', hFig, orientation);
+                hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
+                img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
+                out_image(outputFileName, img);
+                close(hContactFig); close(hFig);
+            catch ME
+                disp(['ERROR generating source screenshot: ' ME.message]);
+                if ~isempty(hFig) && ishandle(hFig), close(hFig); end
+                if ~isempty(hContactFig) && ishandle(hContactFig), close(hContactFig); end
             end
-            bst_colormaps('FireColormapChanged', 'source');
-            
-            figure_3d('SetStandardView', hFig, orientation);
-            hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
-            img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
-            out_image(outputFileName, img);
-            close(hContactFig); close(hFig);
-        catch ME
-            disp(['ERROR generating source screenshot: ' ME.message]);
-            if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
-            if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
         end
+    catch ME_restore
+        % This catch block is for the final restore operation
+        disp(['ERROR during screenshot generation or cleanup: ' ME_restore.message]);
     end
 
-    % If we changed the colormap for relative data, restore it to avoid side effects
-    if ~is_absolute
-        bst_colormaps('SetColormap', 'source', sOldColormap);
+    % ALWAYS restore the original colormap settings
+    bst_colormaps('SetColormap', 'source', sOldColormap);
+end
+    catch ME_restore
+        % This catch block is for the final restore operation
+        disp(['ERROR during screenshot generation or cleanup: ' ME_restore.message]);
     end
+
+    % ALWAYS restore the original colormap settings
+    bst_colormaps('SetColormap', 'source', sOldColormap);
 end
