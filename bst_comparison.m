@@ -650,9 +650,9 @@ function screenshot_single_result(sFile, baseOutputDir)
     orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
     res_cond_name = sFile(1).Condition;
     
-    % Load result file meta-data to check if it's absolute
-    bst_file = in_bst_results(sFile(1).FileName, 0);
-    is_absolute = bst_file.isAbsolute;
+    % Determine if the result is absolute (average) or relative (comparison)
+    % based on the condition name, then set the colormap appropriately.
+    is_absolute = contains(res_cond_name, '_avg');
 
     for iOrient = 1:numel(orientations)
         orientation = orientations{iOrient};
