@@ -665,9 +665,9 @@ function screenshot_single_result(sFile, baseOutputDir)
             
             % Hardcode colormap to +/- 100
             if is_absolute
-                bst_colormaps('SetMaxCustom', 'source', '%', 0, 100);
+                bst_colormaps('SetMaxCustom', 'source', [], 0, 100);
             else
-                bst_colormaps('SetMaxCustom', 'source', '%', -100, 100);
+                bst_colormaps('SetMaxCustom', 'source', [], -100, 100);
             end
             bst_colormaps('FireColormapChanged', 'source');
             
