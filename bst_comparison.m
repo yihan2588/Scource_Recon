@@ -655,10 +655,12 @@ function screenshot_single_result(sFile, baseOutputDir)
     
     % Create a temporary colormap configuration
     sTempColormap = sOldColormap;
-    sTempColormap.isAbsoluteValues = 1; % Force rectified/absolute view
+    sTempColormap.Name = 'cmap_rbw';  % Use diverging colormap
+    sTempColormap.CMap = cmap_rbw(256);  % Set the actual colormap
+    sTempColormap.isAbsoluteValues = 0;  % Real signed values (NOT abs)
     sTempColormap.MaxMode = 'custom';
-    sTempColormap.MinValue = 0;
-    sTempColormap.MaxValue = 100;
+    sTempColormap.MinValue = -100;  % Set to -100
+    sTempColormap.MaxValue = 100;   % Set to +100
     
     % Apply the temporary settings
     bst_colormaps('SetColormap', 'source', sTempColormap);
