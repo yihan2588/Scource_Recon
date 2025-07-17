@@ -589,28 +589,35 @@ function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputD
                 
                 try
                     outputFileName = fullfile(outputDir, [res_cond_name, '.png']);
-                    hFig = script_view_sources(sFile(1).FileName, 'cortex');
                     
-                    % Force colormap settings on the newly created figure
-                    if use_abs
-                        bst_colormaps('SetMaxCustom', colormap_type, display_units, 0, gMax);
-                    else
-                        bst_colormaps('SetMaxCustom', colormap_type, display_units, -symMax, symMax);
-                    end
-                    bst_colormaps('FireColormapChanged', colormap_type);
-                    
-                    % Set the data threshold (amplitude percentage)
-                    panel_surface('SetDataThreshold', hFig, 1, dataThreshold);
+                    % Start a new report
+                    bst_report('Start', sFile);
 
-                    figure_3d('SetStandardView', hFig, orientation);
-                    hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
-                    img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
-                    out_image(outputFileName, img);
-                    close(hContactFig); close(hFig);
+                    % Call the snapshot process
+                    sFiles_snap = bst_process('CallProcess', 'process_snapshot', sFile, [], ...
+                        'type',           'sources_contact', ...
+                        'orient',         orientation, ...
+                        'contact_time',   [-0.05, 0.05], ...
+                        'contact_nimage', 11, ...
+                        'threshold',      dataThreshold * 100, ...
+                        'surfsmooth',     30, ...
+                        'Comment',        [res_cond_name '_' orientation]);
+
+                    % Save the report to a temporary file
+                    tempReportFile = bst_report('Save', sFiles_snap);
+                    
+                    % Export the image from the report
+                    if ~isempty(tempReportFile)
+                        ReportMat = load(tempReportFile);
+                        iImages = find(strcmpi(ReportMat.Reports(:,1), 'image'));
+                        if ~isempty(iImages)
+                            imgRgb = ReportMat.Reports{iImages(1), 4};
+                            out_image(outputFileName, imgRgb);
+                        end
+                        delete(tempReportFile);
+                    end
                 catch ME
                     disp(['ERROR generating source screenshot: ' ME.message]);
-                    if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
-                    if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
                 end
             end
         else % 2D Sensor screenshots
@@ -619,24 +626,32 @@ function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputD
 
             try
                 outputFileName = fullfile(outputDir, [res_cond_name, '_2D_topo.png']);
-                hFig = view_topography(sFile(1).FileName, 'EEG', '2DSensorCap');
+                
+                % Start a new report
+                bst_report('Start', sFile);
 
-                % Force colormap settings on the newly created figure
-                if use_abs
-                    bst_colormaps('SetMaxCustom', colormap_type, display_units, 0, gMax);
-                else
-                    bst_colormaps('SetMaxCustom', colormap_type, display_units, -symMax, symMax);
+                % Call the snapshot process
+                sFiles_snap = bst_process('CallProcess', 'process_snapshot', sFile, [], ...
+                    'type',           'topo_contact', ...
+                    'contact_time',   [-0.05, 0.05], ...
+                    'contact_nimage', 11, ...
+                    'Comment',        [res_cond_name '_2D_topo']);
+
+                % Save the report to a temporary file
+                tempReportFile = bst_report('Save', sFiles_snap);
+                
+                % Export the image from the report
+                if ~isempty(tempReportFile)
+                    ReportMat = load(tempReportFile);
+                    iImages = find(strcmpi(ReportMat.Reports(:,1), 'image'));
+                    if ~isempty(iImages)
+                        imgRgb = ReportMat.Reports{iImages(1), 4};
+                        out_image(outputFileName, imgRgb);
+                    end
+                    delete(tempReportFile);
                 end
-                bst_colormaps('FireColormapChanged', colormap_type);
-
-                hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
-                img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
-                out_image(outputFileName, img);
-                close(hContactFig); close(hFig);
             catch ME
                 disp(['ERROR generating sensor screenshot: ' ME.message]);
-                if exist('hFig', 'var') && ishandle(hFig), close(hFig); end
-                if exist('hContactFig', 'var') && ishandle(hContactFig), close(hContactFig); end
             end
         end
     end
@@ -653,14 +668,12 @@ function screenshot_single_result(sFile, baseOutputDir)
     % Get the original source colormap to restore it later
     sOldColormap = bst_colormaps('GetColormap', 'source');
     
-    % Create a temporary colormap configuration
+    % Create and apply the temporary colormap configuration
     sTempColormap = sOldColormap;
-    sTempColormap.Name = 'cmap_rbw';  % Use diverging colormap
-    sTempColormap.CMap = cmap_rbw(256);  % Set the actual colormap
-    sTempColormap.isAbsoluteValues = 0;  % Real signed values (NOT abs)
+    sTempColormap.isAbsoluteValues = 1; % Force rectified/absolute view
     sTempColormap.MaxMode = 'custom';
-    sTempColormap.MinValue = -100;  % Set to -100
-    sTempColormap.MaxValue = 100;   % Set to +100
+    sTempColormap.MinValue = 0;
+    sTempColormap.MaxValue = 100;
     
     % Apply the temporary settings
     bst_colormaps('SetColormap', 'source', sTempColormap);
@@ -671,24 +684,42 @@ function screenshot_single_result(sFile, baseOutputDir)
             outputDir = fullfile(baseOutputDir, orientation);
             if ~exist(outputDir, 'dir'), mkdir(outputDir); end
             
-            hFig = [];
-            hContactFig = [];
             try
                 outputFileName = fullfile(outputDir, [res_cond_name, '.png']);
-                hFig = script_view_sources(sFile(1).FileName, 'cortex');
                 
-                % The colormap is already configured, just need to update the figure
-                bst_colormaps('FireColormapChanged', 'source');
+                % 1. Start a new report
+                bst_report('Start', sFile);
+
+                % 2. Call the snapshot process
+                sFiles_snap = bst_process('CallProcess', 'process_snapshot', sFile, [], ...
+                    'type',           'sources_contact', ...
+                    'orient',         orientation, ...
+                    'contact_time',   [-0.05, 0.05], ...
+                    'contact_nimage', 11, ...
+                    'threshold',      0, ...
+                    'surfsmooth',     30, ...
+                    'Comment',        [res_cond_name '_' orientation]);
+
+                % 3. Save the report to a temporary file
+                tempReportFile = bst_report('Save', sFiles_snap);
                 
-                figure_3d('SetStandardView', hFig, orientation);
-                hContactFig = view_contactsheet(hFig, 'time', 'fig', [], 11, [-0.05, 0.05]);
-                img = get(findobj(hContactFig, 'Type', 'image'), 'CData');
-                out_image(outputFileName, img);
-                close(hContactFig); close(hFig);
+                % 4. Export the image from the report
+                if ~isempty(tempReportFile)
+                    ReportMat = load(tempReportFile);
+                    iImages = find(strcmpi(ReportMat.Reports(:,1), 'image'));
+                    if ~isempty(iImages)
+                        % Assume the first image is the one we want
+                        imgRgb = ReportMat.Reports{iImages(1), 4};
+                        out_image(outputFileName, imgRgb);
+                        disp(['Saved screenshot to: ' outputFileName]);
+                    end
+                    
+                    % 5. Delete the temporary report file
+                    delete(tempReportFile);
+                end
+
             catch ME
-                disp(['ERROR generating source screenshot: ' ME.message]);
-                if ~isempty(hFig) && ishandle(hFig), close(hFig); end
-                if ~isempty(hContactFig) && ishandle(hContactFig), close(hContactFig); end
+                disp(['ERROR generating source screenshot for orientation ' orientation ': ' ME.message]);
             end
         end
     catch ME_restore
@@ -698,12 +729,11 @@ function screenshot_single_result(sFile, baseOutputDir)
 
     % ALWAYS restore the original colormap settings
     bst_colormaps('SetColormap', 'source', sOldColormap);
+    disp('Restored original colormap settings.');
 end
-    catch ME_restore
-        % This catch block is for the final restore operation
-        disp(['ERROR during screenshot generation or cleanup: ' ME_restore.message]);
-    end
 
-    % ALWAYS restore the original colormap settings
-    bst_colormaps('SetColormap', 'source', sOldColormap);
+function ensure_closed(h)
+    if ~isempty(h) && ishandle(h)
+        close(h);
+    end
 end
