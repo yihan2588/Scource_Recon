@@ -196,19 +196,28 @@ if execMode == 1
     addLog(sprintf('Selected %d subjects to process: %s', numel(SubjectNames), strjoin(SubjectNames, ', ')));
 
     % --- Ask for Group Analysis ---
+    addLog('ENTERING GROUP ANALYSIS SECTION'); % Debug checkpoint
     do_group_analysis = false;
     activeSubjects = {};
     shamSubjects = {};
     
+    addLog(sprintf('DEBUG: do_source type=%s, value=%s', class(do_source), mat2str(do_source)));
+    addLog(sprintf('DEBUG: numel(SubjectNames) type=%s, value=%s', class(numel(SubjectNames)), mat2str(numel(SubjectNames))));
+    addLog(sprintf('DEBUG: Condition evaluation: %s && %s > 1 = %s', mat2str(do_source), mat2str(numel(SubjectNames)), mat2str(do_source && numel(SubjectNames) > 1)));
+    
     if do_source && numel(SubjectNames) > 1
+        addLog('Group analysis conditions met - prompting user...');
         disp(' ');
+        disp('=== GROUP ANALYSIS OPTION ===');
         groupChoice = '';
-        while ~ismember(lower(groupChoice), {'y', 'yes', 'n', 'no', ''})
+        while ~ismember(lower(groupChoice), {'y', 'yes', 'n', 'no'})
             groupChoice = input('Perform group analysis? (y/n) [n]: ', 's');
             if isempty(groupChoice)
                 groupChoice = 'n';
             end
+            addLog(sprintf('User entered: "%s"', groupChoice));
         end
+        addLog(sprintf('Final group choice: "%s"', groupChoice));
         
         if ismember(lower(groupChoice), {'y', 'yes'})
             do_group_analysis = true;
@@ -217,31 +226,52 @@ if execMode == 1
             % Get Active group subjects
             activeStr = '';
             while isempty(activeStr)
-                activeStr = input('Active group subjects (comma-separated, e.g., 101,102,103): ', 's');
+                activeStr = input('Active group subjects (comma-separated numbers, e.g., 102,108,109): ', 's');
                 if isempty(activeStr)
                     disp('Active group cannot be empty.');
                 end
             end
-            activeSubjects = strtrim(strsplit(activeStr, ','));
+            activeNumbers = strtrim(strsplit(activeStr, ','));
             
             % Get Sham group subjects  
             shamStr = '';
             while isempty(shamStr)
-                shamStr = input('Sham group subjects (comma-separated, e.g., 104,105,106): ', 's');
+                shamStr = input('Sham group subjects (comma-separated numbers, e.g., 107,110): ', 's');
                 if isempty(shamStr)
                     disp('Sham group cannot be empty.');
                 end
             end
-            shamSubjects = strtrim(strsplit(shamStr, ','));
+            shamNumbers = strtrim(strsplit(shamStr, ','));
             
-            % Validate subject names
-            allGroupSubjects = [activeSubjects, shamSubjects];
-            invalidSubjects = setdiff(allGroupSubjects, SubjectNames);
-            if ~isempty(invalidSubjects)
-                addLog(['WARNING: Invalid subjects in group definition: ' strjoin(invalidSubjects, ', ')]);
-                addLog('Group analysis will proceed with valid subjects only.');
-                activeSubjects = intersect(activeSubjects, SubjectNames);
-                shamSubjects = intersect(shamSubjects, SubjectNames);
+            % Convert numbers to full subject names
+            activeSubjects = {};
+            for i = 1:numel(activeNumbers)
+                fullName = ['Subject_' activeNumbers{i}];
+                if ismember(fullName, SubjectNames)
+                    activeSubjects{end+1} = fullName;
+                else
+                    addLog(['WARNING: Subject not found: ' fullName]);
+                end
+            end
+            
+            shamSubjects = {};
+            for i = 1:numel(shamNumbers)
+                fullName = ['Subject_' shamNumbers{i}];
+                if ismember(fullName, SubjectNames)
+                    shamSubjects{end+1} = fullName;
+                else
+                    addLog(['WARNING: Subject not found: ' fullName]);
+                end
+            end
+            
+            % Validate that we have subjects in both groups
+            if isempty(activeSubjects)
+                addLog('ERROR: No valid active subjects found.');
+                do_group_analysis = false;
+            end
+            if isempty(shamSubjects)
+                addLog('ERROR: No valid sham subjects found.');
+                do_group_analysis = false;
             end
             
             addLog(sprintf('Active group (%d subjects): %s', numel(activeSubjects), strjoin(activeSubjects, ', ')));
@@ -271,21 +301,6 @@ if execMode == 1
     end
     addLog(sprintf('Using comparison bounds: ±%g%%', user_bound));
 
-    % --- Get Default Anatomy Surface for Projection ---
-    defaultSubjName = bst_get('DirDefaultSubject');
-    defaultSurfFile = '';
-    if do_source
-        try
-            defaultSurfFile = bst_get('SurfaceFileByType', defaultSubjName, 'Cortex');
-            if ~isempty(defaultSurfFile)
-                addLog(['Using default anatomy surface: ' defaultSurfFile]);
-            else
-                addLog('WARNING: No default anatomy surface found. Skipping projection.');
-            end
-        catch ME
-            addLog(['WARNING: Could not get default anatomy surface: ' ME.message]);
-        end
-    end
 
     % --- Main Loop ---
     for iSubj = 1:numel(SubjectNames)
@@ -362,44 +377,38 @@ if execMode == 1
             end
 
             % --- Step 1.5: Project averaged sources to default anatomy ---
-            if ~isempty(defaultSurfFile)
-                addLog('Step 1.5: Projecting averaged sources to default anatomy...');
-                for iStage = 1:numel(stages)
-                    stage = stages{iStage};
-                    condition = [NightName, '_', stage];
-                    avg_tag = [stage, '_avg'];
-                    projected_tag = [stage, '_avg_projected'];
+            addLog('Step 1.5: Projecting averaged sources to default anatomy...');
+            for iStage = 1:numel(stages)
+                stage = stages{iStage};
+                condition = [NightName, '_', stage];
+                avg_tag = [stage, '_avg'];
+                projected_tag = [stage, '_avg_projected'];
+                
+                % Find the averaged file
+                sFiles_avg = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+                    'subjectname', SubjName, ...
+                    'condition',   condition, ...
+                    'tag',         avg_tag);
+                
+                if isempty(sFiles_avg)
+                    addLog(sprintf('WARNING: No averaged file found for projection: %s', avg_tag));
+                    continue;
+                end
+                
+                try
+                    % Project to default anatomy - let Brainstorm figure out the default
+                    sFiles_projected = bst_process('CallProcess', 'process_project_sources', sFiles_avg, [], ...
+                        'headmodeltype', 'surface');  % Cortex surface
                     
-                    % Find the averaged file
-                    sFiles_avg = bst_process('CallProcess', 'process_select_files_results', [], [], ...
-                        'subjectname', SubjName, ...
-                        'condition',   condition, ...
-                        'tag',         avg_tag);
-                    
-                    if isempty(sFiles_avg)
-                        addLog(sprintf('WARNING: No averaged file found for projection: %s', avg_tag));
-                        continue;
+                    if ~isempty(sFiles_projected)
+                        % Add projected tag to the new file
+                        bst_process('CallProcess', 'process_add_tag', sFiles_projected, [], ...
+                            'tag', projected_tag, ...
+                            'output', 'name');
+                        addLog(sprintf('   => Projected %s to default anatomy with tag: %s', stage, projected_tag));
                     end
-                    
-                    try
-                        % Project to default anatomy using bst_project_sources
-                        projectedFiles = bst_project_sources({sFiles_avg(1).FileName}, defaultSurfFile, 0, 0);
-                        
-                        if ~isempty(projectedFiles)
-                            % Add projected tag to the new file
-                            sFiles_projected = bst_process('CallProcess', 'process_select_files_results', [], [], ...
-                                'filename', projectedFiles{1});
-                            
-                            if ~isempty(sFiles_projected)
-                                bst_process('CallProcess', 'process_add_tag', sFiles_projected, [], ...
-                                    'tag', projected_tag, ...
-                                    'output', 'name');
-                                addLog(sprintf('   => Projected %s to default anatomy with tag: %s', stage, projected_tag));
-                            end
-                        end
-                    catch ME
-                        addLog(sprintf('WARNING: Failed to project %s: %s', stage, ME.message));
-                    end
+                catch ME
+                    addLog(sprintf('WARNING: Failed to project %s: %s', stage, ME.message));
                 end
             end
 
@@ -550,23 +559,36 @@ if execMode == 1
                     addLog(sprintf('Averaging %s group %s stage...', groupName, stage));
                     
                     % Collect all projected files for this stage from group subjects
+                    % NOTE: Projected files are stored in "Group analysis" subject, not original subjects
                     groupFiles = {};
-                    for iSubj = 1:numel(groupSubjects)
-                        subjName = groupSubjects{iSubj};
-                        condition = [NightName, '_', stage];
-                        
-                        % Find projected file for this subject/stage
-                        sFiles_projected = bst_process('CallProcess', 'process_select_files_results', [], [], ...
-                            'subjectname', subjName, ...
-                            'condition',   condition, ...
-                            'tag',         projected_tag);
-                        
-                        if ~isempty(sFiles_projected)
-                            groupFiles{end+1} = sFiles_projected(1);
-                        else
-                            addLog(sprintf('WARNING: No projected file found for %s %s %s', subjName, stage, NightName));
+                    condition = [NightName, '_', stage];
+                    
+                    % Find all projected files for this condition in Group analysis subject
+                    sFiles_projected = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+                        'subjectname', 'Group_analysis', ...
+                        'condition',   condition, ...
+                        'tag',         projected_tag);
+                    
+                    if ~isempty(sFiles_projected)
+                        % Filter projected files to include only those from group subjects
+                        for iFile = 1:numel(sFiles_projected)
+                            projFile = sFiles_projected(iFile);
+                            % Check if this projected file corresponds to one of our group subjects
+                            % The file comment should contain the original subject name
+                            for iSubj = 1:numel(groupSubjects)
+                                subjName = groupSubjects{iSubj};
+                                if contains(projFile.Comment, subjName)
+                                    groupFiles{end+1} = projFile;
+                                    addLog(sprintf('Found projected file for %s: %s', subjName, projFile.Comment));
+                                    break;
+                                end
+                            end
                         end
+                    else
+                        addLog(sprintf('WARNING: No projected files found in Group_analysis for condition: %s', condition));
                     end
+                    
+                    addLog(sprintf('Collected %d projected files for %s group %s stage', numel(groupFiles), groupName, stage));
                     
                     if ~isempty(groupFiles)
                         % Average across subjects using mean(abs(x))
@@ -1208,6 +1230,9 @@ end
 function generate_stage_average_contact_sheet(sFile, baseOutputDir, base_filename)
     orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
     
+    % EXPLICITLY restore default source colormap for stage averages
+    bst_colormaps('RestoreDefaults', 'source');
+    
     try
         % Generate contact sheet for each orientation using default Brainstorm colormap
         for iOrient = 1:numel(orientations)
@@ -1223,7 +1248,7 @@ function generate_stage_average_contact_sheet(sFile, baseOutputDir, base_filenam
                 outputFileName = fullfile(outputDir, [base_filename, '_', orientation, '_contact_sheet.png']);
                 
                 % Create the contact sheet using Brainstorm's native function
-                % NO colormap modification - let Brainstorm use default behavior
+                % Using default source colormap behavior (royal_gramma, absolute values, global scaling)
                 create_native_contact_sheet(sFile, orientation, outputFileName);
                 
                 disp(['Saved stage average contact sheet for ' orientation ' to: ' outputFileName]);
