@@ -571,14 +571,18 @@ if execMode == 1
                     
                     if ~isempty(sFiles_projected)
                         % Filter projected files to include only those from group subjects
+                        % Use a set to track which subjects we've already found to avoid duplicates
+                        foundSubjects = {};
+                        
                         for iFile = 1:numel(sFiles_projected)
                             projFile = sFiles_projected(iFile);
                             % Check if this projected file corresponds to one of our group subjects
                             % The file comment should contain the original subject name
                             for iSubj = 1:numel(groupSubjects)
                                 subjName = groupSubjects{iSubj};
-                                if contains(projFile.Comment, subjName)
+                                if contains(projFile.Comment, subjName) && ~ismember(subjName, foundSubjects)
                                     groupFiles{end+1} = projFile;
+                                    foundSubjects{end+1} = subjName;
                                     addLog(sprintf('Found projected file for %s: %s', subjName, projFile.Comment));
                                     break;
                                 end
@@ -591,11 +595,20 @@ if execMode == 1
                     addLog(sprintf('Collected %d projected files for %s group %s stage', numel(groupFiles), groupName, stage));
                     
                     if ~isempty(groupFiles)
-                        % Average across subjects using mean(abs(x))
-                        sFiles_group_avg = bst_process('CallProcess', 'process_average', groupFiles, [], ...
-                            'avgtype',    1, ...  % Everything
-                            'avg_func',   2, ...  % mean(abs(x))
-                            'weighted',   0);
+                        % Use the working approach directly - convert cell array to struct array
+                        if iscell(groupFiles) && isstruct(groupFiles{1})
+                            % Convert cell array to struct array format expected by bst_process
+                            groupFilesArray = [groupFiles{:}];
+                            
+                            % Average across subjects using mean(abs(x))
+                            sFiles_group_avg = bst_process('CallProcess', 'process_average', groupFilesArray, [], ...
+                                'avgtype',    1, ...  % Everything
+                                'avg_func',   2, ...  % mean(abs(x))
+                                'weighted',   0);
+                        else
+                            addLog('ERROR: Unexpected groupFiles format');
+                            continue;
+                        end
                         
                         % Add group tag
                         bst_process('CallProcess', 'process_add_tag', sFiles_group_avg, [], ...
