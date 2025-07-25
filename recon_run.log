@@ -1,5 +1,9 @@
-[2025-07-11 15:06:00] === Pipeline Start ===
-[2025-07-11 15:06:00] Brainstorm already running.
-[2025-07-11 15:06:00] Scanning Brainstorm DB directory for protocol folders: /Users/ywu646/Desktop/Brainstorm_dir
-[2025-07-11 15:06:03] Selected existing protocol: Jul09_final_1
-[2025-07-11 15:06:10] Parsed STRENGTHEN paths.
+[2025-07-24 18:04:08] === Pipeline Start ===
+[2025-07-24 18:04:08] Brainstorm already running.
+[2025-07-24 18:04:08] Scanning Brainstorm DB directory for protocol folders: /Users/ywu646/Desktop/Brainstorm_dir
+[2025-07-24 18:04:08] Note: No protocol.mat found in directory: Jun27
+[2025-07-24 18:04:08] Note: No protocol.mat found in directory: Jun28
+[2025-07-24 18:04:08] Note: No protocol.mat found in directory: Jun28final
+[2025-07-24 18:04:08] Note: No protocol.mat found in directory: testrun_5_subjects
+[2025-07-24 18:04:12] Selected existing protocol: Jlu18
+[2025-07-24 18:04:19] Parsed STRENGTHEN paths.

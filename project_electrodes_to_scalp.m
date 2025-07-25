@@ -47,19 +47,49 @@ function project_electrodes_to_scalp(SubjectName, ConditionName, channelFilePath
     ChannelMat = in_bst_channel(channelFullPath);
     ChanLoc = ChannelMat.Channel;
     
-    % Extract just the .Loc field for the projection function
-    InitialChanLoc = vertcat(ChanLoc.Loc);
-    addLog(sprintf('Loaded %d channel locations.', size(InitialChanLoc, 1)));
+    % Extract coordinates with robust format handling
+    % Handle both 3×1 (column) and 1×3 (row) coordinate formats
+    InitialChanLoc = zeros(length(ChanLoc), 3);
+    for iChan = 1:length(ChanLoc)
+        loc = ChanLoc(iChan).Loc;
+        if size(loc, 1) == 3 && size(loc, 2) == 1
+            % Column vector (3×1) - transpose to row for processing
+            InitialChanLoc(iChan, :) = loc';
+        elseif size(loc, 1) == 1 && size(loc, 2) == 3
+            % Row vector (1×3) - use as is
+            InitialChanLoc(iChan, :) = loc;
+        elseif numel(loc) == 3
+            % Handle any other 3-element format
+            InitialChanLoc(iChan, :) = reshape(loc, 1, 3);
+        else
+            addLog(sprintf('ERROR: Unexpected channel coordinate format for channel %d (%s): %dx%d', ...
+                iChan, ChanLoc(iChan).Name, size(loc,1), size(loc,2)));
+            return;
+        end
+    end
+    addLog(sprintf('Loaded %d channel locations (format: %dx%d).', size(InitialChanLoc, 1), size(InitialChanLoc, 2)));
 
     % --- 3. Call the Projection Function ---
     ProjectedChanLoc = channel_project_scalp(Vertices, InitialChanLoc);
     addLog('Completed projection of electrodes onto scalp surface.');
 
     % --- 4. Update the ChannelMat Structure ---
+    % Validate projected coordinates format
+    addLog(sprintf('Projected coordinates format: %dx%d', size(ProjectedChanLoc, 1), size(ProjectedChanLoc, 2)));
+    
+    if size(ProjectedChanLoc, 1) ~= length(ChanLoc) || size(ProjectedChanLoc, 2) ~= 3
+        addLog(sprintf('ERROR: Projected coordinates have unexpected dimensions: %dx%d (expected %dx3)', ...
+            size(ProjectedChanLoc, 1), size(ProjectedChanLoc, 2), length(ChanLoc)));
+        return;
+    end
+    
+    % Assign projected coordinates back as column vectors (Brainstorm convention)
     for iChan = 1:length(ChanLoc)
-        ChanLoc(iChan).Loc = ProjectedChanLoc(iChan, :);
+        % Ensure coordinates are stored as 3×1 column vectors
+        ChanLoc(iChan).Loc = ProjectedChanLoc(iChan, :)';
     end
     ChannelMat.Channel = ChanLoc;
+    addLog(sprintf('Updated %d channel locations with projected coordinates.', length(ChanLoc)));
 
     % --- 5. Save the Updated Channel File ---
     % Overwrite the existing channel file with the new locations
