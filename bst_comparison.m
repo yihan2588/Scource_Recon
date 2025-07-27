@@ -828,7 +828,8 @@ if execMode == 1
                         else
                             generate_stage_average_single_image(sResult, baseOutputDir, filename, stage_colormap_bounds);
                         end
-                        addLog(sprintf('   => Stage average %s: %s', use_contact_sheet ? 'contact sheet' : 'single image', stage));
+                        mode_str = {'single image', 'contact sheet'};
+                        addLog(sprintf('   => Stage average %s: %s', mode_str{use_contact_sheet + 1}, stage));
                     end
                 end
                 
@@ -847,7 +848,8 @@ if execMode == 1
                         else
                             generate_custom_single_image(sResult, baseOutputDir, filename, user_bound);
                         end
-                        addLog(sprintf('   => Comparison %s: %s', use_contact_sheet ? 'contact sheet' : 'single image', comp_name));
+                        mode_str = {'single image', 'contact sheet'};
+                        addLog(sprintf('   => Comparison %s: %s', mode_str{use_contact_sheet + 1}, comp_name));
                     end
                 end
             end
