@@ -717,64 +717,6 @@ if execMode == 1
         addLog('=== Group Analysis Complete ===');
     end
 
-    % --- Calculate Synchronized Colormap Bounds for Stage Averages ---
-    stage_colormap_bounds = [];
-    if do_source
-        addLog('--- Calculating synchronized colormap bounds for stage averages ---');
-        stage_max_values = [];
-        stages = {'pre-stim', 'stim', 'post-stim'};
-        
-        % Loop through all subjects and nights to find global max for stage averages
-        for iSubj = 1:numel(SubjectNames)
-            SubjName = SubjectNames{iSubj};
-            subjDir = fullfile(dataDir, SubjName);
-            condDirContents = dir(subjDir);
-            condDirs = condDirContents([condDirContents.isdir] & ~startsWith({condDirContents.name}, {'.', '@'}));
-            condNames = {condDirs.name};
-            condNamesForNightDetection = condNames(~contains(condNames, '_vs_'));
-            nightNames = {};
-            for iCond = 1:numel(condNamesForNightDetection)
-                parts = strsplit(condNamesForNightDetection{iCond}, '_');
-                if numel(parts) > 1, nightNames{end+1} = parts{1}; end
-            end
-            uniqueNightNames = unique(nightNames);
-
-            for iNight = 1:numel(uniqueNightNames)
-                NightName = uniqueNightNames{iNight};
-                
-                for iStage = 1:numel(stages)
-                    stage = stages{iStage};
-                    condition = [NightName, '_', stage];
-                    avg_tag = [stage, '_avg'];
-                    
-                    sResult = bst_process('CallProcess', 'process_select_files_results', [], [], ...
-                        'subjectname', SubjName, ...
-                        'condition',   condition, ...
-                        'tag',         avg_tag);
-                    
-                    if ~isempty(sResult)
-                        try
-                            % Load the result file to get data
-                            ResultMat = in_bst_results(sResult(1).FileName, 0);
-                            if isfield(ResultMat, 'ImageGridAmp') && ~isempty(ResultMat.ImageGridAmp)
-                                data_max = max(abs(ResultMat.ImageGridAmp(:)));
-                                stage_max_values(end+1) = data_max;
-                            end
-                        catch ME
-                            addLog(sprintf('WARNING: Could not read data from %s: %s', sResult(1).FileName, ME.message));
-                        end
-                    end
-                end
-            end
-        end
-        
-        if ~isempty(stage_max_values)
-            stage_colormap_bounds = max(stage_max_values);
-            addLog(sprintf('Calculated global stage average colormap bound: %g', stage_colormap_bounds));
-        else
-            addLog('WARNING: No stage average data found for colormap synchronization');
-        end
-    end
 
     % --- Screenshot Loop ---
     addLog('--- Generating all screenshots ---');
@@ -824,9 +766,9 @@ if execMode == 1
                     if ~isempty(sResult)
                         filename = [SubjName, '_', NightName, '_', stage, '_avg'];
                         if use_contact_sheet
-                            generate_stage_average_contact_sheet(sResult, baseOutputDir, filename, stage_colormap_bounds);
+                            generate_stage_average_contact_sheet(sResult, baseOutputDir, filename);
                         else
-                            generate_stage_average_single_image(sResult, baseOutputDir, filename, stage_colormap_bounds);
+                            generate_stage_average_single_image(sResult, baseOutputDir, filename);
                         end
                         mode_str = {'single image', 'contact sheet'};
                         addLog(sprintf('   => Stage average %s: %s', mode_str{use_contact_sheet + 1}, stage));
@@ -895,6 +837,48 @@ if execMode == 1
     
     % Generate screenshots for group analysis results
     if do_group_analysis && do_source
+        addLog('--- Calculating group-specific colormap bounds ---');
+        
+        % Calculate group-specific bounds from Active and Sham group stage averages
+        group_stage_max_values = [];
+        stages = {'pre-stim', 'stim', 'post-stim'};
+        groupNames = {'Active', 'Sham'};
+        
+        % Find all group average files and extract their max values
+        for iGroup = 1:numel(groupNames)
+            groupName = groupNames{iGroup};
+            for iStage = 1:numel(stages)
+                stage = stages{iStage};
+                group_avg_tag = [groupName, '_', stage, '_group_avg'];
+                
+                % Find group average files with this tag
+                sResult = bst_process('CallProcess', 'process_select_files_results', [], [], 'tag', group_avg_tag);
+                
+                if ~isempty(sResult)
+                    try
+                        % Load the result file to get data
+                        ResultMat = in_bst_results(sResult(1).FileName, 0);
+                        if isfield(ResultMat, 'ImageGridAmp') && ~isempty(ResultMat.ImageGridAmp)
+                            data_max = max(abs(ResultMat.ImageGridAmp(:)));
+                            group_stage_max_values(end+1) = data_max;
+                            addLog(sprintf('Found %s %s group average, max value: %g', groupName, stage, data_max));
+                        end
+                    catch ME
+                        addLog(sprintf('WARNING: Could not read group data from %s: %s', sResult(1).FileName, ME.message));
+                    end
+                end
+            end
+        end
+        
+        % Calculate group-specific bounds
+        group_stage_colormap_bounds = [];
+        if ~isempty(group_stage_max_values)
+            group_stage_colormap_bounds = max(group_stage_max_values);
+            addLog(sprintf('Calculated group-specific stage average colormap bound: %g', group_stage_colormap_bounds));
+        else
+            addLog('WARNING: No group stage average data found for bounds calculation');
+        end
+        
         addLog('--- Generating group analysis screenshots ---');
         
         % Find all unique nights for group analysis
@@ -943,8 +927,13 @@ if execMode == 1
                     
                     if ~isempty(sResult)
                         filename = [groupName, '_', NightName, '_', stage, '_group_avg'];
-                        generate_stage_average_contact_sheet(sResult, baseOutputDir, filename);
-                        addLog(sprintf('   => %s group stage contact sheet: %s', groupName, stage));
+                        if use_contact_sheet
+                            generate_stage_average_contact_sheet(sResult, baseOutputDir, filename, group_stage_colormap_bounds);
+                        else
+                            generate_stage_average_single_image(sResult, baseOutputDir, filename, group_stage_colormap_bounds);
+                        end
+                        mode_str = {'single image', 'contact sheet'};
+                        addLog(sprintf('   => %s group stage %s: %s', groupName, mode_str{use_contact_sheet + 1}, stage));
                     end
                 end
                 
