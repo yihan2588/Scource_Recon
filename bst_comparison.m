@@ -1329,11 +1329,16 @@ end
 function generate_stage_average_contact_sheet(sFile, baseOutputDir, base_filename, sync_colormap_bounds)
     orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
     
+    % Make sync_colormap_bounds optional
+    if nargin < 4
+        sync_colormap_bounds = [];
+    end
+    
     % Get the original source colormap to restore it later
     sOldColormap = bst_colormaps('GetColormap', 'source');
     
     % Set up synchronized colormap for stage averages
-    if nargin >= 4 && ~isempty(sync_colormap_bounds) && isfinite(sync_colormap_bounds)
+    if ~isempty(sync_colormap_bounds) && isfinite(sync_colormap_bounds)
         % Use synchronized bounds with royal_gramma colormap
         sTempColormap = sOldColormap;
         sTempColormap.Name = 'cmap_royal_gramma';
@@ -1387,11 +1392,16 @@ end
 function generate_stage_average_single_image(sFile, baseOutputDir, base_filename, sync_colormap_bounds)
     orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
     
+    % Make sync_colormap_bounds optional
+    if nargin < 4
+        sync_colormap_bounds = [];
+    end
+    
     % Get the original source colormap to restore it later
     sOldColormap = bst_colormaps('GetColormap', 'source');
     
     % Set up synchronized colormap for stage averages
-    if nargin >= 4 && ~isempty(sync_colormap_bounds) && isfinite(sync_colormap_bounds)
+    if ~isempty(sync_colormap_bounds) && isfinite(sync_colormap_bounds)
         % Use synchronized bounds with royal_gramma colormap
         sTempColormap = sOldColormap;
         sTempColormap.Name = 'cmap_royal_gramma';
