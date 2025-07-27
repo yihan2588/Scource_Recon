@@ -72,6 +72,10 @@ if execMode == 1
     addLog('Executing Full Comparison Pipeline...');
 
     % --- Protocol Selection ---
+    % First, refresh the Brainstorm database to ensure we see latest changes
+    addLog('Refreshing Brainstorm database...');
+    db_reload_database('current');
+    
     protocolNames = {};
     DbDir = bst_get('BrainstormDbDir');
     if isempty(DbDir) || ~exist(DbDir, 'dir')
@@ -120,6 +124,11 @@ if execMode == 1
     selectedProtocolName = protocolNames{choiceNum};
     iProtocol = bst_get('Protocol', selectedProtocolName);
     gui_brainstorm('SetCurrentProtocol', iProtocol);
+    
+    % Refresh the protocol database to ensure we see the latest files
+    addLog('Refreshing protocol database for latest files...');
+    db_reload_database(iProtocol);
+    
     addLog(['Selected protocol: ', selectedProtocolName]);
 
     % --- Ask user for processing mode ---
