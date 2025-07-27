@@ -301,6 +301,35 @@ if execMode == 1
     end
     addLog(sprintf('Using comparison bounds: ±%g%%', user_bound));
 
+    % --- Ask for Image Type (Contact Sheet vs Single Image) ---
+    disp(' ');
+    disp('Select image type:');
+    disp('1: Contact sheet (11 images from -50ms to +50ms)');
+    disp('2: Single image at NegPeak (0ms)');
+    imageTypeChoice = -1;
+    while ~ismember(imageTypeChoice, [1, 2])
+        try
+            imageTypeStr = input('Enter your choice (1-2) [1]: ', 's');
+            if isempty(imageTypeStr)
+                imageTypeChoice = 1; % Default to contact sheet
+            else
+                imageTypeChoice = str2double(imageTypeStr);
+            end
+            if ~ismember(imageTypeChoice, [1, 2])
+                disp('Invalid choice. Please enter 1 or 2.');
+            end
+        catch
+            disp('Invalid choice. Please enter 1 or 2.');
+        end
+    end
+    
+    use_contact_sheet = (imageTypeChoice == 1);
+    if use_contact_sheet
+        addLog('Using contact sheet mode (11 images from -50ms to +50ms)');
+    else
+        addLog('Using single image mode (single image at 0ms)');
+    end
+
 
     % --- Main Loop ---
     for iSubj = 1:numel(SubjectNames)
@@ -688,8 +717,67 @@ if execMode == 1
         addLog('=== Group Analysis Complete ===');
     end
 
+    % --- Calculate Synchronized Colormap Bounds for Stage Averages ---
+    stage_colormap_bounds = [];
+    if do_source
+        addLog('--- Calculating synchronized colormap bounds for stage averages ---');
+        stage_max_values = [];
+        stages = {'pre-stim', 'stim', 'post-stim'};
+        
+        % Loop through all subjects and nights to find global max for stage averages
+        for iSubj = 1:numel(SubjectNames)
+            SubjName = SubjectNames{iSubj};
+            subjDir = fullfile(dataDir, SubjName);
+            condDirContents = dir(subjDir);
+            condDirs = condDirContents([condDirContents.isdir] & ~startsWith({condDirContents.name}, {'.', '@'}));
+            condNames = {condDirs.name};
+            condNamesForNightDetection = condNames(~contains(condNames, '_vs_'));
+            nightNames = {};
+            for iCond = 1:numel(condNamesForNightDetection)
+                parts = strsplit(condNamesForNightDetection{iCond}, '_');
+                if numel(parts) > 1, nightNames{end+1} = parts{1}; end
+            end
+            uniqueNightNames = unique(nightNames);
+
+            for iNight = 1:numel(uniqueNightNames)
+                NightName = uniqueNightNames{iNight};
+                
+                for iStage = 1:numel(stages)
+                    stage = stages{iStage};
+                    condition = [NightName, '_', stage];
+                    avg_tag = [stage, '_avg'];
+                    
+                    sResult = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+                        'subjectname', SubjName, ...
+                        'condition',   condition, ...
+                        'tag',         avg_tag);
+                    
+                    if ~isempty(sResult)
+                        try
+                            % Load the result file to get data
+                            ResultMat = in_bst_results(sResult(1).FileName, 0);
+                            if isfield(ResultMat, 'ImageGridAmp') && ~isempty(ResultMat.ImageGridAmp)
+                                data_max = max(abs(ResultMat.ImageGridAmp(:)));
+                                stage_max_values(end+1) = data_max;
+                            end
+                        catch ME
+                            addLog(sprintf('WARNING: Could not read data from %s: %s', sResult(1).FileName, ME.message));
+                        end
+                    end
+                end
+            end
+        end
+        
+        if ~isempty(stage_max_values)
+            stage_colormap_bounds = max(stage_max_values);
+            addLog(sprintf('Calculated global stage average colormap bound: %g', stage_colormap_bounds));
+        else
+            addLog('WARNING: No stage average data found for colormap synchronization');
+        end
+    end
+
     % --- Screenshot Loop ---
-    addLog('--- Generating all screenshots using Mode 2 contact sheet approach ---');
+    addLog('--- Generating all screenshots ---');
     
     % Process individual subjects first
     for iSubj = 1:numel(SubjectNames)
@@ -720,9 +808,9 @@ if execMode == 1
             baseOutputDir = fullfile(strengthenDir, 'contact_sheet_stages_comparison', SubjName, NightName);
             
             if do_source
-                addLog('... generating source contact sheets');
+                addLog('... generating source screenshots');
                 
-                % Generate contact sheets for stage averages (use default colormap behavior)
+                % Generate screenshots for stage averages (use synchronized colormap bounds)
                 for iStage = 1:numel(stages)
                     stage = stages{iStage};
                     condition = [NightName, '_', stage];
@@ -734,14 +822,17 @@ if execMode == 1
                         'tag',         avg_tag);
                     
                     if ~isempty(sResult)
-                        % For stage averages, use default Brainstorm colormap (no custom bounds)
                         filename = [SubjName, '_', NightName, '_', stage, '_avg'];
-                        generate_stage_average_contact_sheet(sResult, baseOutputDir, filename);
-                        addLog(sprintf('   => Stage average contact sheet: %s', stage));
+                        if use_contact_sheet
+                            generate_stage_average_contact_sheet(sResult, baseOutputDir, filename, stage_colormap_bounds);
+                        else
+                            generate_stage_average_single_image(sResult, baseOutputDir, filename, stage_colormap_bounds);
+                        end
+                        addLog(sprintf('   => Stage average %s: %s', use_contact_sheet ? 'contact sheet' : 'single image', stage));
                     end
                 end
                 
-                % Generate contact sheets for comparisons (use user-defined bounds)
+                % Generate screenshots for comparisons (use user-defined bounds)
                 for iComp = 1:numel(comparisons)
                     comp_name = comparisons{iComp}{3};
                     
@@ -751,8 +842,12 @@ if execMode == 1
                     
                     if ~isempty(sResult)
                         filename = [SubjName, '_', NightName, '_', comp_name];
-                        generate_custom_contact_sheet(sResult, baseOutputDir, filename, user_bound);
-                        addLog(sprintf('   => Comparison contact sheet: %s', comp_name));
+                        if use_contact_sheet
+                            generate_custom_contact_sheet(sResult, baseOutputDir, filename, user_bound);
+                        else
+                            generate_custom_single_image(sResult, baseOutputDir, filename, user_bound);
+                        end
+                        addLog(sprintf('   => Comparison %s: %s', use_contact_sheet ? 'contact sheet' : 'single image', comp_name));
                     end
                 end
             end
@@ -1239,15 +1334,34 @@ function screenshot_single_result(sFile, baseOutputDir)
     generate_custom_contact_sheet(sFile, baseOutputDir, res_cond_name, user_bound);
 end
 
-% --- STAGE AVERAGE CONTACT SHEET GENERATOR (DEFAULT COLORMAP) ---
-function generate_stage_average_contact_sheet(sFile, baseOutputDir, base_filename)
+% --- STAGE AVERAGE CONTACT SHEET GENERATOR (DEFAULT COLORMAP WITH SYNC BOUNDS) ---
+function generate_stage_average_contact_sheet(sFile, baseOutputDir, base_filename, sync_colormap_bounds)
     orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
     
-    % EXPLICITLY restore default source colormap for stage averages
-    bst_colormaps('RestoreDefaults', 'source');
+    % Get the original source colormap to restore it later
+    sOldColormap = bst_colormaps('GetColormap', 'source');
+    
+    % Set up synchronized colormap for stage averages
+    if nargin >= 4 && ~isempty(sync_colormap_bounds) && isfinite(sync_colormap_bounds)
+        % Use synchronized bounds with royal_gramma colormap
+        sTempColormap = sOldColormap;
+        sTempColormap.Name = 'cmap_royal_gramma';
+        sTempColormap.CMap = cmap_royal_gramma(256);
+        sTempColormap.isAbsoluteValues = 1;  % Absolute values for stage averages
+        sTempColormap.MaxMode = 'custom';
+        sTempColormap.MinValue = 0;
+        sTempColormap.MaxValue = sync_colormap_bounds;
+        sTempColormap.DisplayColorbar = 1;
+        
+        % Apply the synchronized colormap
+        bst_colormaps('SetColormap', 'source', sTempColormap);
+    else
+        % Use default source colormap for stage averages
+        bst_colormaps('RestoreDefaults', 'source');
+    end
     
     try
-        % Generate contact sheet for each orientation using default Brainstorm colormap
+        % Generate contact sheet for each orientation
         for iOrient = 1:numel(orientations)
             orientation = orientations{iOrient};
             
@@ -1261,7 +1375,6 @@ function generate_stage_average_contact_sheet(sFile, baseOutputDir, base_filenam
                 outputFileName = fullfile(outputDir, [base_filename, '_', orientation, '_contact_sheet.png']);
                 
                 % Create the contact sheet using Brainstorm's native function
-                % Using default source colormap behavior (royal_gramma, absolute values, global scaling)
                 create_native_contact_sheet(sFile, orientation, outputFileName);
                 
                 disp(['Saved stage average contact sheet for ' orientation ' to: ' outputFileName]);
@@ -1274,6 +1387,119 @@ function generate_stage_average_contact_sheet(sFile, baseOutputDir, base_filenam
     catch ME_main
         disp(['ERROR during stage average contact sheet generation: ' ME_main.message]);
     end
+    
+    % ALWAYS restore the original colormap settings
+    bst_colormaps('SetColormap', 'source', sOldColormap);
+end
+
+% --- STAGE AVERAGE SINGLE IMAGE GENERATOR (DEFAULT COLORMAP WITH SYNC BOUNDS) ---
+function generate_stage_average_single_image(sFile, baseOutputDir, base_filename, sync_colormap_bounds)
+    orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
+    
+    % Get the original source colormap to restore it later
+    sOldColormap = bst_colormaps('GetColormap', 'source');
+    
+    % Set up synchronized colormap for stage averages
+    if nargin >= 4 && ~isempty(sync_colormap_bounds) && isfinite(sync_colormap_bounds)
+        % Use synchronized bounds with royal_gramma colormap
+        sTempColormap = sOldColormap;
+        sTempColormap.Name = 'cmap_royal_gramma';
+        sTempColormap.CMap = cmap_royal_gramma(256);
+        sTempColormap.isAbsoluteValues = 1;  % Absolute values for stage averages
+        sTempColormap.MaxMode = 'custom';
+        sTempColormap.MinValue = 0;
+        sTempColormap.MaxValue = sync_colormap_bounds;
+        sTempColormap.DisplayColorbar = 1;
+        
+        % Apply the synchronized colormap
+        bst_colormaps('SetColormap', 'source', sTempColormap);
+    else
+        % Use default source colormap for stage averages
+        bst_colormaps('RestoreDefaults', 'source');
+    end
+    
+    try
+        % Generate single image for each orientation
+        for iOrient = 1:numel(orientations)
+            orientation = orientations{iOrient};
+            
+            try
+                % Create output directory
+                outputDir = fullfile(baseOutputDir, 'single_images', orientation);
+                if ~exist(outputDir, 'dir')
+                    mkdir(outputDir);
+                end
+                
+                outputFileName = fullfile(outputDir, [base_filename, '_', orientation, '_0ms.png']);
+                
+                % Create single image at 0ms using Brainstorm's native function
+                create_native_single_image(sFile, orientation, outputFileName);
+                
+                disp(['Saved stage average single image for ' orientation ' to: ' outputFileName]);
+                
+            catch ME
+                disp(['ERROR generating stage average single image for orientation ' orientation ': ' ME.message]);
+            end
+        end
+        
+    catch ME_main
+        disp(['ERROR during stage average single image generation: ' ME_main.message]);
+    end
+    
+    % ALWAYS restore the original colormap settings
+    bst_colormaps('SetColormap', 'source', sOldColormap);
+end
+
+% --- CUSTOM SINGLE IMAGE GENERATOR ---
+function generate_custom_single_image(sFile, baseOutputDir, base_filename, user_bound)
+    orientations = {'top', 'bottom', 'left_intern', 'right_intern'};
+    
+    % Get the original source colormap to restore it later
+    sOldColormap = bst_colormaps('GetColormap', 'source');
+    
+    % Set up custom diverging colormap (cmap_rbw) with user-defined bounds
+    sTempColormap = sOldColormap;
+    sTempColormap.Name = 'cmap_rbw';
+    sTempColormap.CMap = cmap_rbw(256);  % Diverging colormap
+    sTempColormap.isAbsoluteValues = 0;  % Not absolute values for diverging
+    sTempColormap.MaxMode = 'custom';
+    sTempColormap.MinValue = -user_bound;
+    sTempColormap.MaxValue = user_bound;
+    sTempColormap.DisplayColorbar = 1;   % Ensure colorbar is visible
+    
+    % Apply the custom colormap
+    bst_colormaps('SetColormap', 'source', sTempColormap);
+    
+    try
+        % Generate single image for each orientation
+        for iOrient = 1:numel(orientations)
+            orientation = orientations{iOrient};
+            
+            try
+                % Create output directory
+                outputDir = fullfile(baseOutputDir, 'single_images', orientation);
+                if ~exist(outputDir, 'dir')
+                    mkdir(outputDir);
+                end
+                
+                outputFileName = fullfile(outputDir, [base_filename, '_', orientation, '_0ms.png']);
+                
+                % Create single image at 0ms using Brainstorm's native function
+                create_native_single_image(sFile, orientation, outputFileName);
+                
+                disp(['Saved single image for ' orientation ' to: ' outputFileName]);
+                
+            catch ME
+                disp(['ERROR generating single image for orientation ' orientation ': ' ME.message]);
+            end
+        end
+        
+    catch ME_main
+        disp(['ERROR during single image generation: ' ME_main.message]);
+    end
+    
+    % ALWAYS restore the original colormap settings
+    bst_colormaps('SetColormap', 'source', sOldColormap);
 end
 
 % --- CUSTOM CONTACT SHEET GENERATOR (USING VIEW_CONTACTSHEET) ---
@@ -1565,6 +1791,60 @@ function create_native_contact_sheet(sFile, orientation, outputFileName)
         % Ignore cleanup errors
     end
     
+    try
+        if ~isempty(hFig) && ishandle(hFig)
+            close(hFig);
+        end
+    catch
+        % Ignore cleanup errors
+    end
+end
+
+% --- CREATE SINGLE IMAGE AT 0MS (NEGPEAK) ---
+function create_native_single_image(sFile, orientation, outputFileName)
+    hFig = [];
+    
+    try
+        % Create source visualization figure
+        hFig = view_surface_data([], sFile(1).FileName, [], 'NewFigure');
+        if isempty(hFig)
+            error('Could not create source visualization figure');
+        end
+        
+        % Set surface properties (same as process_snapshot)
+        iSurf = 1;
+        panel_surface('SetDataThreshold', hFig, iSurf, 0);     % No threshold
+        panel_surface('SetSurfaceSmooth', hFig, iSurf, 0.3, 0); % 30% smoothing
+        
+        % Set orientation
+        figure_3d('SetStandardView', hFig, orientation);
+        
+        % Set time to 0ms (NegPeak)
+        panel_time('SetCurrentTime', hFig, 0);
+        
+        % Show colorbar for single images
+        bst_colormaps('SetColorbarVisible', hFig, 1);
+        
+        % Set figure size for better quality
+        set(hFig, 'Position', [200, 200, 400, 400]);
+        
+        % Wait for rendering
+        drawnow;
+        pause(1);  % Give more time for single image rendering
+        
+        % Capture the single image
+        single_img = out_figure_image(hFig);
+        if ~isempty(single_img)
+            out_image(outputFileName, single_img);
+        else
+            error('Failed to capture single image');
+        end
+        
+    catch ME
+        rethrow(ME);
+    end
+    
+    % Cleanup figure
     try
         if ~isempty(hFig) && ishandle(hFig)
             close(hFig);
