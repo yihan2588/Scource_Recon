@@ -1,5 +1,6 @@
 function subjects = parseStrengthenPaths(WorkingDir)
 % PARSESTRENGTHENPATHS  Parse multiple m2m_* => multiple subjects, nights, .set
+%                       MODIFIED: Only processes proto1_ files
 %
 % INPUT:
 %   WorkingDir : Path to your STRENGTHEN folder (e.g. "/Users/wyh/STRENGTHEN")
@@ -8,8 +9,11 @@ function subjects = parseStrengthenPaths(WorkingDir)
 %   subjects(i).SubjectName  : e.g. "Subject_001"
 %   subjects(i).AnatDir      : e.g. "/Users/wyh/STRENGTHEN/Structural/m2m_001"
 %   subjects(i).Nights(j).NightName   : e.g. "Night1"
-%   subjects(i).Nights(j).MainEEGFiles: cell array of all slow_waves/*.set
+%   subjects(i).Nights(j).MainEEGFiles: cell array of proto1_*.set files only
 %   subjects(i).Nights(j).NoiseEEGFile: single noise_eeg_data.set
+%
+% NOTE: This version filters to include only files starting with 'proto1_'
+%       Excludes proto2_, proto3_, ..., proto10_ files
 
     if nargin < 1 || isempty(WorkingDir)
         WorkingDir = '/Users/wyh/0122';  % ** define your own default path (the main will prompt for input if empty)
@@ -79,9 +83,21 @@ function subjects = parseStrengthenPaths(WorkingDir)
 
             % gather all .set in sw_data
             swList = dir(fullfile(slowWavesDir, '*.set'));
-            mainEEGPaths = cell(numel(swList), 1);
+            
+            % Filter for proto1 files only
+            proto1Mask = false(size(swList));
             for iFile = 1:numel(swList)
-                mainEEGPaths{iFile} = fullfile(swList(iFile).folder, swList(iFile).name);
+                proto1Mask(iFile) = startsWith(swList(iFile).name, 'proto1_');
+            end
+            swList_proto1 = swList(proto1Mask);
+            
+            % Log filtering results
+            fprintf('  Found %d total .set files, %d proto1 files in %s\n', ...
+                numel(swList), numel(swList_proto1), slowWavesDir);
+            
+            mainEEGPaths = cell(numel(swList_proto1), 1);
+            for iFile = 1:numel(swList_proto1)
+                mainEEGPaths{iFile} = fullfile(swList_proto1(iFile).folder, swList_proto1(iFile).name);
             end
 
             subjects(sCount).Nights(nCount).MainEEGFiles = mainEEGPaths;
