@@ -1148,7 +1148,7 @@ function process_screenshot_group(sFiles_group, type, colormap_type, baseOutputD
                         'type',           'sources_contact', ...
                         'orient',         orientation, ...
                         'contact_time',   [-0.05, 0.05], ...
-                        'contact_nimage', 11, ...
+                        'contact_nimage', 1, ...
                         'threshold',      dataThreshold * 100, ...
                         'surfsmooth',     30, ...
                         'Comment',        [res_cond_name '_' orientation]);
@@ -1443,8 +1443,8 @@ end
 % --- CREATE SENSOR CONTACT SHEET USING BRAINSTORM'S NATIVE VIEW_CONTACTSHEET ---
 function create_native_sensor_contact_sheet(sFile, outputFileName)
     % Contact sheet parameters (same as used in process_snapshot)
-    contact_time = [-0.05, 0.05];  % From -50ms to +50ms 
-    contact_nimage = 11;           % 11 images
+    contact_time = [-0, 0];  % From -50ms to +50ms 
+    contact_nimage = 2;           % 11 images
     
     hFig = [];
     hContactFig = [];
@@ -1504,8 +1504,8 @@ end
 % --- CREATE CONTACT SHEET USING BRAINSTORM'S NATIVE VIEW_CONTACTSHEET ---
 function create_native_contact_sheet(sFile, orientation, outputFileName)
     % Contact sheet parameters (same as used in process_snapshot)
-    contact_time = [-0.05, 0.05];  % From -50ms to +50ms 
-    contact_nimage = 11;           % 11 images
+    contact_time = [-0, 0];  % From -50ms to +50ms 
+    contact_nimage = 1;           % 11 images
     
     hFig = [];
     hContactFig = [];
