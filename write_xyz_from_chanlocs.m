@@ -1,5 +1,5 @@
 %function to write EEGLAB format channel (editted template channel) to import back to Brainstorm
-function write_xyz_with_index(ChanLocs, outFile)
+function write_xyz_from_chanlocs(ChanLocs, outFile)
 % WRITE_XYZ_WITH_INDEX
 % Writes lines in the format:
 %   <LineIndex>  <X>  <Y>  <Z>  <Label>

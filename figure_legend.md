@@ -1,0 +1,6 @@
+Figure 1. EEG source reconstruction workflow for localizing cortical generators of sleep slow waves
+Input (Blue Panel): Three data inputs are required: (A) Individual T1-weighted MRI for head modeling; (B) 256-channel EEG electrode coordinates with bad channels excluded; (C) EEG recordings including 5-second baseline segments for noise estimation and 100ms epochs around slow wave negative peaks.
+
+Processing Pipeline (Green Panel): Five sequential steps using Brainstorm software: (1) **Coregistration** - Align EEG electrodes with MRI anatomy; (2) **Noise covariance** - Estimate noise characteristics from baseline recordings; (3) **BEM surfaces** - Generate head geometry models from MRI; (4) **Forward model** - Calculate how brain sources project to scalp sensors; (5) **Source reconstruction** - Apply sLORETA algorithm to localize cortical activity from scalp EEG.
+
+Output (Yellow Panel): For each slow wave epoch: (1) **sLORETA brain maps** - 3D visualizations of estimated cortical activity with color-coded intensity; (2) **CSV data matrix** - Time-series of source activity values for 68 brain regions (DKT atlas) enabling statistical analysis across subjects and conditions. Results are structured by subject, night, and sleep stage for systematic comparison of slow wave source patterns.

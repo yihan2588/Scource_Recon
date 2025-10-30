@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BST Comparison Data Structure - Presentation Guide</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+        }
+        .diagram-container {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .slide-info {
+            background: #e8f4fd;
+            padding: 15px;
+            border-left: 5px solid #3498db;
+            margin: 15px 0;
+            border-radius: 0 5px 5px 0;
+        }
+        .screenshot-instruction {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-style: italic;
+        }
+        .legend {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>BST Comparison Results - Data Structure for Presentation</h1>
+    
+    <div class="legend">
+        <h3>Color Legend for Screenshots:</h3>
+        <ul>
+            <li><strong style="color: #e74c3c;">RED boxes</strong> = Level 5: Group Comparisons</li>
+            <li><strong style="color: #f39c12;">ORANGE boxes</strong> = Level 4: Group Stage Averages</li>
+            <li><strong style="color: #17a2b8;">TEAL boxes</strong> = Level 3: Subject Comparisons</li>
+            <li><strong style="color: #3498db;">BLUE boxes</strong> = Level 2: Subject Stage Averages</li>
+            <li><strong style="color: #9b59b6;">PURPLE boxes</strong> = Level 1: Individual sLORETA Results</li>
+        </ul>
+    </div>
+
+    <!-- OVERALL DATA STRUCTURE -->
+    <div class="diagram-container">
+        <div class="section-title">Complete Data Structure Overview</div>
+        <div class="screenshot-instruction">
+            Screenshot this entire section for introduction slide explaining overall analysis pipeline
+        </div>
+        <div class="mermaid">
+        flowchart TD
+            A[Raw Slow Wave EEG] --> B[Source Reconstruction sLORETA]
+            
+            B --> C[Level 1: Individual sLORETA Results]
+            
+            C --> D["Subject_001 Active<br/>• pre-stim sLORETA results<br/>• stim sLORETA results<br/>• post-stim sLORETA results"]
+            C --> E["Subject_002 Active<br/>• pre-stim sLORETA results<br/>• stim sLORETA results<br/>• post-stim sLORETA results"] 
+            C --> F["Subject_003 Sham<br/>• pre-stim sLORETA results<br/>• stim sLORETA results<br/>• post-stim sLORETA results"]
+            C --> G["Subject_004 Sham<br/>• pre-stim sLORETA results<br/>• stim sLORETA results<br/>• post-stim sLORETA results"]
+            
+            D --> H[Level 2: Subject Stage Averages]
+            E --> H
+            F --> H
+            G --> H
+            
+            H --> I[Level 3: Subject Comparisons]
+            H --> J["Level 4: Group Stage Averages<br/>Active = avg of Subj 001, 002<br/>Sham = avg of Subj 003, 004"]
+            J --> K[Level 5: Group Comparisons]
+            
+            style A fill:#27ae60,stroke:#2d3748,stroke-width:2px,color:#fff
+            style B fill:#27ae60,stroke:#2d3748,stroke-width:2px,color:#fff
+            style C fill:#9b59b6,stroke:#2d3748,stroke-width:2px,color:#fff
+            style D fill:#e8e8e8,stroke:#2d3748,stroke-width:1px,color:#333
+            style E fill:#e8e8e8,stroke:#2d3748,stroke-width:1px,color:#333
+            style F fill:#e8e8e8,stroke:#2d3748,stroke-width:1px,color:#333
+            style G fill:#e8e8e8,stroke:#2d3748,stroke-width:1px,color:#333
+            style H fill:#3498db,stroke:#2d3748,stroke-width:3px,color:#fff
+            style I fill:#17a2b8,stroke:#2d3748,stroke-width:3px,color:#fff
+            style J fill:#f39c12,stroke:#2d3748,stroke-width:3px,color:#fff
+            style K fill:#e74c3c,stroke:#2d3748,stroke-width:3px,color:#fff
+        </div>
+    </div>
+
+    <!-- LEVEL 5: GROUP COMPARISONS -->
+    <div class="diagram-container">
+        <div class="section-title">Level 5: Group Comparisons</div>
+        <div class="slide-info">
+            <strong>For Primary Slides:</strong> Screenshot this section to show what Group Comparisons represent
+        </div>
+        <div class="screenshot-instruction">
+            Screenshot the RED section below for slides showing group comparison maps
+        </div>
+        <div class="mermaid">
+        flowchart TD
+            A[Group Comparisons] --> B[Active Group Comparisons]
+            A --> C[Sham Group Comparisons]
+            A --> D[Between-Group Comparisons]
+            
+            B --> B1[Active_Stim_vs_Pre]
+            B --> B2[Active_Post_vs_Stim]
+            B --> B3[Active_Post_vs_Pre]
+            
+            C --> C1[Sham_Stim_vs_Pre]
+            C --> C2[Sham_Post_vs_Stim]
+            C --> C3[Sham_Post_vs_Pre]
+            
+            D --> D1[Active_vs_Sham_Pre]
+            D --> D2[Active_vs_Sham_Stim]
+            D --> D3[Active_vs_Sham_Post]
+            
+            style A fill:#e74c3c,stroke:#2d3748,stroke-width:3px,color:#fff
+            style B fill:#e74c3c,stroke:#2d3748,stroke-width:2px,color:#fff
+            style C fill:#e74c3c,stroke:#2d3748,stroke-width:2px,color:#fff
+            style D fill:#e74c3c,stroke:#2d3748,stroke-width:2px,color:#fff
+            style B1 fill:#ff6b6b,stroke:#2d3748,stroke-width:1px,color:#fff
+            style B2 fill:#ff6b6b,stroke:#2d3748,stroke-width:1px,color:#fff
+            style B3 fill:#ff6b6b,stroke:#2d3748,stroke-width:1px,color:#fff
+            style C1 fill:#ff6b6b,stroke:#2d3748,stroke-width:1px,color:#fff
+            style C2 fill:#ff6b6b,stroke:#2d3748,stroke-width:1px,color:#fff
+            style C3 fill:#ff6b6b,stroke:#2d3748,stroke-width:1px,color:#fff
+            style D1 fill:#ff6b6b,stroke:#2d3748,stroke-width:1px,color:#fff
+            style D2 fill:#ff6b6b,stroke:#2d3748,stroke-width:1px,color:#fff
+            style D3 fill:#ff6b6b,stroke:#2d3748,stroke-width:1px,color:#fff
+        </div>
+    </div>
+
+    <!-- LEVEL 4: GROUP STAGE AVERAGES -->
+    <div class="diagram-container">
+        <div class="section-title">Level 4: Group Stage Averages</div>
+        <div class="slide-info">
+            <strong>For Supporting Slides:</strong> Screenshot this section to show what Group Stage Averages represent
+        </div>
+        <div class="screenshot-instruction">
+            Screenshot the ORANGE section below for slides showing group stage averages
+        </div>
+        <div class="mermaid">
+        flowchart TD
+            A["Group Stage Averages<br/>Active = avg of Subj 001, 002<br/>Sham = avg of Subj 003, 004"] --> B[Active Group Stage Averages]
+            A --> C[Sham Group Stage Averages]
+            
+            D[Subject_001_pre-stim_avg] --> B1[Active_pre-stim_avg]
+            E[Subject_002_pre-stim_avg] --> B1
+            F[Subject_001_stim_avg] --> B2[Active_stim_avg]
+            G[Subject_002_stim_avg] --> B2
+            H[Subject_001_post-stim_avg] --> B3[Active_post-stim_avg]
+            I[Subject_002_post-stim_avg] --> B3
+            
+            J[Subject_003_pre-stim_avg] --> C1[Sham_pre-stim_avg]
+            K[Subject_004_pre-stim_avg] --> C1
+            L[Subject_003_stim_avg] --> C2[Sham_stim_avg]
+            M[Subject_004_stim_avg] --> C2
+            N[Subject_003_post-stim_avg] --> C3[Sham_post-stim_avg]
+            O[Subject_004_post-stim_avg] --> C3
+            
+            B --> B1
+            B --> B2
+            B --> B3
+            C --> C1
+            C --> C2
+            C --> C3
+            
+            style A fill:#f39c12,stroke:#2d3748,stroke-width:3px,color:#fff
+            style B fill:#f39c12,stroke:#2d3748,stroke-width:2px,color:#fff
+            style C fill:#f39c12,stroke:#2d3748,stroke-width:2px,color:#fff
+            style B1 fill:#f5a623,stroke:#2d3748,stroke-width:1px,color:#fff
+            style B2 fill:#f5a623,stroke:#2d3748,stroke-width:1px,color:#fff
+            style B3 fill:#f5a623,stroke:#2d3748,stroke-width:1px,color:#fff
+            style C1 fill:#f5a623,stroke:#2d3748,stroke-width:1px,color:#fff
+            style C2 fill:#f5a623,stroke:#2d3748,stroke-width:1px,color:#fff
+            style C3 fill:#f5a623,stroke:#2d3748,stroke-width:1px,color:#fff
+        </div>
+    </div>
+
+    <!-- LEVEL 3: SUBJECT COMPARISONS -->
+    <div class="diagram-container">
+        <div class="section-title">Level 3: Subject Comparisons</div>
+        <div class="slide-info">
+            <strong>For Individual Example Slides:</strong> Screenshot this section to show what Subject Comparisons represent
+        </div>
+        <div class="screenshot-instruction">
+            Screenshot the TEAL section below for slides showing subject comparison maps
+        </div>
+        <div class="mermaid">
+        flowchart TD
+            A[Subject Comparisons] --> B[Subject_001 Active Comparisons]
+            A --> C[Subject_002 Active Comparisons]
+            A --> D[Subject_003 Sham Comparisons]
+            A --> E[Subject_004 Sham Comparisons]
+            
+            B --> B1[Subject_001_Stim_vs_Pre]
+            B --> B2[Subject_001_Post_vs_Stim]
+            B --> B3[Subject_001_Post_vs_Pre]
+            
+            C --> C1[Subject_002_Stim_vs_Pre]
+            C --> C2[Subject_002_Post_vs_Stim]
+            C --> C3[Subject_002_Post_vs_Pre]
+            
+            D --> D1[Subject_003_Stim_vs_Pre]
+            D --> D2[Subject_003_Post_vs_Stim]
+            D --> D3[Subject_003_Post_vs_Pre]
+            
+            E --> E1[Subject_004_Stim_vs_Pre]
+            E --> E2[Subject_004_Post_vs_Stim]
+            E --> E3[Subject_004_Post_vs_Pre]
+            
+            style A fill:#17a2b8,stroke:#2d3748,stroke-width:3px,color:#fff
+            style B fill:#17a2b8,stroke:#2d3748,stroke-width:2px,color:#fff
+            style C fill:#17a2b8,stroke:#2d3748,stroke-width:2px,color:#fff
+            style D fill:#17a2b8,stroke:#2d3748,stroke-width:2px,color:#fff
+            style E fill:#17a2b8,stroke:#2d3748,stroke-width:2px,color:#fff
+            style B1 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style B2 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style B3 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style C1 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style C2 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style C3 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style D1 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style D2 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style D3 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style E1 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style E2 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+            style E3 fill:#5bc0de,stroke:#2d3748,stroke-width:1px,color:#fff
+        </div>
+    </div>
+
+    <!-- LEVEL 2: SUBJECT STAGE AVERAGES -->
+    <div class="diagram-container">
+        <div class="section-title">Level 2: Subject Stage Averages</div>
+        <div class="slide-info">
+            <strong>For Supporting Example Slides:</strong> Screenshot this section to show what Subject Stage Averages represent
+        </div>
+        <div class="screenshot-instruction">
+            Screenshot the BLUE section below for slides showing subject stage averages
+        </div>
+        <div class="mermaid">
+        flowchart TD
+            A[Subject Stage Averages] --> B["Subject_001 Active<br/>• pre-stim_avg<br/>• stim_avg<br/>• post-stim_avg"]
+            A --> C["Subject_002 Active<br/>• pre-stim_avg<br/>• stim_avg<br/>• post-stim_avg"]
+            A --> D["Subject_003 Sham<br/>• pre-stim_avg<br/>• stim_avg<br/>• post-stim_avg"]
+            A --> E["Subject_004 Sham<br/>• pre-stim_avg<br/>• stim_avg<br/>• post-stim_avg"]
+            
+            style A fill:#3498db,stroke:#2d3748,stroke-width:3px,color:#fff
+            style B fill:#5dade2,stroke:#2d3748,stroke-width:2px,color:#fff
+            style C fill:#5dade2,stroke:#2d3748,stroke-width:2px,color:#fff
+            style D fill:#5dade2,stroke:#2d3748,stroke-width:2px,color:#fff
+            style E fill:#5dade2,stroke:#2d3748,stroke-width:2px,color:#fff
+        </div>
+    </div>
+
+    <!-- PRESENTATION FLOW -->
+    <div class="diagram-container">
+        <div class="section-title">Presentation Flow Guide</div>
+        <div class="screenshot-instruction">
+            Screenshot this section for your presenter notes or methodology slide
+        </div>
+        <div class="mermaid">
+        flowchart TD
+            A[Level 1: Individual sLORETA Results] --> B[Level 2: Subject Stage Averages]
+            B --> C[Level 3: Subject Comparisons]
+            B --> D[Level 4: Group Stage Averages]
+            D --> E[Level 5: Group Comparisons]
+            
+            A1[Subject_001_pre-stim_001.mat<br/>Subject_001_pre-stim_002.mat<br/>etc.] -.-> A
+            B1[Subject_001_pre-stim_avg<br/>Subject_001_stim_avg<br/>Subject_001_post-stim_avg] -.-> B
+            C1[Subject_001_Stim_vs_Pre<br/>Subject_001_Post_vs_Stim<br/>Subject_001_Post_vs_Pre] -.-> C
+            D1[Active_pre-stim_avg<br/>Active_stim_avg<br/>Active_post-stim_avg] -.-> D
+            E1[Active_Stim_vs_Pre<br/>Active_Post_vs_Stim<br/>Active_Post_vs_Pre] -.-> E
+            
+            style A fill:#9b59b6,stroke:#2d3748,stroke-width:2px,color:#fff
+            style B fill:#3498db,stroke:#2d3748,stroke-width:2px,color:#fff
+            style C fill:#17a2b8,stroke:#2d3748,stroke-width:2px,color:#fff
+            style D fill:#f39c12,stroke:#2d3748,stroke-width:2px,color:#fff
+            style E fill:#e74c3c,stroke:#2d3748,stroke-width:2px,color:#fff
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+
+    <div class="legend">
+        <h3>Screenshot Instructions:</h3>
+        <ol>
+            <li><strong>Introduction slide:</strong> Screenshot the complete overview diagram</li>
+            <li><strong>Primary slides:</strong> Screenshot the RED section showing Level 5 Group Comparisons</li>
+            <li><strong>Supporting slides:</strong> Screenshot the ORANGE section showing Level 4 Group Stage Averages</li>
+            <li><strong>Individual example slides:</strong> Screenshot the TEAL section showing Level 3 Subject Comparisons</li>
+            <li><strong>Supporting example slides:</strong> Screenshot the BLUE section showing Level 2 Subject Stage Averages</li>
+            <li><strong>Methodology slide:</strong> Screenshot the presentation flow guide</li>
+        </ol>
+        
+        <h3>Data Structure Hierarchy:</h3>
+        <ul>
+            <li><strong>Level 1 (PURPLE):</strong> Individual sLORETA results</li>
+            <li><strong>Level 2 (BLUE):</strong> Subject stage averages</li>
+            <li><strong>Level 3 (TEAL):</strong> Subject comparisons</li>
+            <li><strong>Level 4 (ORANGE):</strong> Group stage averages</li>
+            <li><strong>Level 5 (RED):</strong> Group comparisons</li>
+        </ul>
+    </div>
+
+</body>
+</html>
