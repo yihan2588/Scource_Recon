@@ -12,7 +12,7 @@ function subjects = parseStrengthenPaths(WorkingDir)
 %   subjects(i).Nights(j).NoiseEEGFile: single noise_eeg_data.set
 
     if nargin < 1 || isempty(WorkingDir)
-        WorkingDir = '/Users/wyh/0122';  % ** define your own default path (the main will prompt for input if empty)
+        error('parseStrengthenPaths:MissingInput', 'WorkingDir must be provided and point to the STRENGTHEN folder.');
     end
 
     %% 1) Find all "m2m_*" under Structural => each => one subject

@@ -199,29 +199,24 @@ function main()
 
 
     % (2) Prompt user for STRENGTHEN path
-    userDir = input('Enter the path to STRENGTHEN folder (containing Assets/, Structural/, EEG_data/): ','s');
-    if isempty(userDir)
-        subjects = parseStrengthenPaths(); % default path is handled inside parseStrengthenPaths if needed
-        % Re-get userDir if default was used inside parseStrengthenPaths
-        if isempty(userDir) && ~isempty(subjects) && isfield(subjects(1), 'AnatDir') && ~isempty(subjects(1).AnatDir)
-             % Infer userDir from the first subject's AnatDir path
-             [subjParent, ~] = fileparts(subjects(1).AnatDir);
-             [userDir, ~] = fileparts(subjParent);
-             addLog(sprintf('Inferred STRENGTHEN directory: %s', userDir));
+    userDir = '';
+    while true
+        userDir = strtrim(input('Enter the path to STRENGTHEN folder (containing Assets/, Structural/, EEG_data/): ', 's'));
+        if isempty(userDir)
+            disp('Path cannot be empty.');
+        elseif ~exist(userDir, 'dir')
+            disp(['Directory not found: ', userDir]);
+        else
+            break;
         end
-    else
-        subjects = parseStrengthenPaths(userDir);
     end
+    subjects = parseStrengthenPaths(userDir);
+    addLog(sprintf('Using STRENGTHEN directory: %s', userDir));
     addLog('Parsed STRENGTHEN paths.');
 
     % Define log file path using userDir AFTER it's determined
-    if ~isempty(userDir) && exist(userDir, 'dir')
-        logName = fullfile(userDir, 'recon_run.log');
-        addLog(sprintf('Logging to: %s', logName));
-    else
-        addLog('WARNING: STRENGTHEN directory not valid or not found. Logging to script directory.');
-        logName = fullfile(scriptDir, 'recon_run.log'); % Fallback
-    end
+    logName = fullfile(userDir, 'recon_run.log');
+    addLog(sprintf('Logging to: %s', logName));
 
 
     % (2.5) Allow user to select which subjects and nights to process
