@@ -282,20 +282,3 @@ function bst_comparison()
     return;
 
 end
-
-function writeCumulativeLog(logName, logMessages)
-    try
-        fid = fopen(logName, 'w');
-        if fid > 0
-            for i = 1:length(logMessages)
-                fprintf(fid, ''%s\n'', logMessages{i});
-            end
-            fclose(fid);
-        end
-    catch ME
-        warning('Warning: Could not write to log file %s (%s).', logName, ME.message);
-        if exist('fid','var') && fid > 0
-            fclose(fid);
-        end
-    end
-end

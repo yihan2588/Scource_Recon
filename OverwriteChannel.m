@@ -1,11 +1,11 @@
-function [nChUsed, xyzChanFile] = OverwriteChannel(SubjectName, ConditionName, ThisChanFile, strengthenDir)
-% Overwrite BST channel coords with a template .xyz
+function [nChUsed, xyzChanFile] = OverwriteChannel(SubjectName, ConditionName, ThisChanFile, assetsDir)
+% Overwrite BST channel coords with a template .xyz stored in the repo Assets folder
 %
 % INPUTS:
 %   SubjectName   : The subject name in Brainstorm
 %   ConditionName : The specific condition to apply the new channel file to
 %   ThisChanFile  : The relative Brainstorm channel file path
-%   strengthenDir : The top-level STRENGTHEN folder (for "Assets/256_net_temp.xyz")
+%   assetsDir     : Path to repository Assets directory (contains 256_net_temp.xyz)
 %
 % OUTPUTS:
 %   nChUsed       : Number of matched channels
@@ -32,8 +32,8 @@ function [nChUsed, xyzChanFile] = OverwriteChannel(SubjectName, ConditionName, T
     end
     oldNames = {oldChannels.Name};
 
-    %% 2) Load & filter the template .xyz from "Assets/256_net_temp.xyz"
-    templateXYZ = fullfile(strengthenDir, 'Assets', '256_net_temp.xyz');
+    %% 2) Load & filter the template .xyz from repo Assets folder
+    templateXYZ = fullfile(assetsDir, '256_net_temp.xyz');
     if ~exist(templateXYZ,'file')
         error('Template .xyz file not found: %s', templateXYZ);
     end

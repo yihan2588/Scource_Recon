@@ -3,6 +3,10 @@ function main()
     scriptDir = fileparts(mfilename('fullpath'));
     % Add it (and subfolders, if any) to MATLAB path
     addpath(scriptDir);
+    assetsDir = fullfile(scriptDir, 'Assets');
+    if ~exist(assetsDir, 'dir')
+        error('Assets directory not found at %s. Please ensure the repository Assets folder is available.', assetsDir);
+    end
 
     % Prompt for and add Brainstorm path
     bstPath = '';
@@ -201,7 +205,7 @@ function main()
     % (2) Prompt user for STRENGTHEN path
     userDir = '';
     while true
-        userDir = strtrim(input('Enter the path to STRENGTHEN folder (containing Assets/, Structural/, EEG_data/): ', 's'));
+        userDir = strtrim(input('Enter the path to STRENGTHEN folder (containing Structural/ and EEG_data/): ', 's'));
         if isempty(userDir)
             disp('Path cannot be empty.');
         elseif ~exist(userDir, 'dir')
@@ -227,7 +231,7 @@ function main()
     badChannelMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
 
     % Load subject-level defaults if available
-    lookupPath = fullfile(scriptDir, 'bad_channels_lookup.json');
+    lookupPath = fullfile(assetsDir, 'bad_channels_lookup.json');
     badChannelLookup = struct();
     if exist(lookupPath, 'file')
         try
@@ -246,9 +250,11 @@ function main()
         defaultBad = {};
         if isstruct(badChannelLookup) && isfield(badChannelLookup, SubjName)
             defaultBad = badChannelLookup.(SubjName);
-            % Ensure cell array of char vectors
+            % Normalise to cell array of char vectors
             if iscell(defaultBad)
-                defaultBad = cellfun(@(c) char(c), defaultBad, 'UniformOutput', false);
+                defaultBad = cellfun(@(c) char(string(c)), defaultBad, 'UniformOutput', false);
+            elseif isstring(defaultBad)
+                defaultBad = cellstr(defaultBad);
             else
                 defaultBad = {};
             end
@@ -479,7 +485,7 @@ function main()
                     originalChanFile = getNegPeakChannelFile(SubjName, currentCond);
                     if ~isempty(originalChanFile)
                         % OverwriteChannel now returns the path to the new channel file
-                        [nChUsed, newChanFile] = OverwriteChannel(SubjName, currentCond, originalChanFile, userDir);
+                        [nChUsed, newChanFile] = OverwriteChannel(SubjName, currentCond, originalChanFile, assetsDir);
                         addLog(sprintf('   1. Overwrote channels for "%s": %d matched. New channel file: %s', currentCond, nChUsed, newChanFile));
                     else
                         addLog(sprintf('   WARNING: No channel file found for "%s", skipping all channel processing.', currentCond));

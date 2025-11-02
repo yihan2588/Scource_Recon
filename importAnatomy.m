@@ -8,7 +8,7 @@ function importAnatomy(SubjectName, AnatDir)
 
     % Attempt to load per-subject fiducials from lookup table
     scriptDir = fileparts(mfilename('fullpath'));
-    lookupPath = fullfile(scriptDir, 'fiducials_lookup.json');
+    lookupPath = fullfile(scriptDir, 'Assets', 'fiducials_lookup.json');
     nas = defaultNas;
     lpa = defaultLpa;
     rpa = defaultRpa;
