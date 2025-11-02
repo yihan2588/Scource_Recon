@@ -77,8 +77,7 @@ Continue inside Brainstorm with your preferred manual comparison pipeline (e.g.,
 ## Manual Steps (Post-Script)
 
 - Review the exported screenshots and CSV summaries for each stage to verify there are no anomalies (misaligned sensors, empty scouts, etc.).
-- Use Brainstorm’s GUIs to build power comparisons, group averages, contact sheets, or publication figures based on the `_avg_projected` files.
-- Document any additional manual edits (e.g., bad-channel adjustments) back into `Assets/bad_channels_lookup.json` for reproducibility.
+- Use Brainstorm’s GUIs to build power comparisons, group averages, and contact sheets based on the `_avg_projected` files.
 
 ## Logs
 
