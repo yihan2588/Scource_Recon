@@ -223,47 +223,86 @@ function main()
     [selectedSubjects, selectedNights] = selectSubjectsNights(subjects);
     addLog('User selected subjects/nights.');
 
-    % (2.6) Prompt user for bad channels for each selected subject/night
+    % (2.6) Resolve bad channels (lookup + optional overrides)
     badChannelMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+
+    % Load subject-level defaults if available
+    lookupPath = fullfile(scriptDir, 'bad_channels_lookup.json');
+    badChannelLookup = struct();
+    if exist(lookupPath, 'file')
+        try
+            badChannelLookup = jsondecode(fileread(lookupPath));
+        catch ME_json
+            addLog(sprintf('WARNING: Failed to load bad-channel lookup (%s). Error: %s', lookupPath, ME_json.message));
+        end
+    else
+        addLog(sprintf('Bad-channel lookup not found at %s. Proceeding without defaults.', lookupPath));
+    end
+
+    % Allow per-night confirmation/override
     for subIdx = 1:numel(selectedSubjects)
         iSubj = selectedSubjects(subIdx);
         SubjName = subjects(iSubj).SubjectName;
-        selectedNightsForSubj = selectedNights{iSubj};
-        for nightIdx = 1:numel(selectedNightsForSubj)
-            iN = selectedNightsForSubj(nightIdx);
-            NightName = subjects(iSubj).Nights(iN).NightName;
-            
-            validInput = false;
-            while ~validInput
-                prompt = sprintf('Enter bad channels for %s - %s (comma-separated, format E001,E002) or press Enter for none: ', SubjName, NightName);
-                badChannelsStr = input(prompt, 's');
+        defaultBad = {};
+        if isstruct(badChannelLookup) && isfield(badChannelLookup, SubjName)
+            defaultBad = badChannelLookup.(SubjName);
+            % Ensure cell array of char vectors
+            if iscell(defaultBad)
+                defaultBad = cellfun(@(c) char(c), defaultBad, 'UniformOutput', false);
+            else
+                defaultBad = {};
+            end
+        end
 
-                if isempty(badChannelsStr)
-                    addLog(sprintf('No bad channels entered for %s - %s.', SubjName, NightName));
-                    validInput = true;
+        selectedNightsForSubj = selectedNights{iSubj};
+
+        % Single-night mode: process only Night1, skip others with log
+        effectiveNightIdx = [];
+        for idx = 1:numel(selectedNightsForSubj)
+            candidateIdx = selectedNightsForSubj(idx);
+            candidateName = subjects(iSubj).Nights(candidateIdx).NightName;
+            if strcmpi(candidateName, 'Night1')
+                effectiveNightIdx(end+1) = candidateIdx; %#ok<AGROW>
+            else
+                addLog(sprintf('Single-night mode: skipping %s for %s.', candidateName, SubjName));
+            end
+        end
+
+        if isempty(effectiveNightIdx)
+            addLog(sprintf('No Night1 entries selected for %s. Skipping subject.', SubjName));
+            continue;
+        end
+
+        for nightIdx = 1:numel(effectiveNightIdx)
+            iN = effectiveNightIdx(nightIdx);
+            NightName = subjects(iSubj).Nights(iN).NightName;
+            mapKey = [SubjName '_' NightName];
+
+            % Prompt once per night, showing defaults and allowing override
+            promptMsg = sprintf('Bad channels for %s - %s [default: %s]: ', ...
+                SubjName, NightName, strjoin(defaultBad, ','));
+            userInput = input(promptMsg, 's');
+
+            if isempty(userInput)
+                badChannels = defaultBad;
+                if isempty(badChannels)
+                    addLog(sprintf('No bad channels set for %s.', mapKey));
                     continue;
                 end
-
-                % Split the string by commas and remove any whitespace
-                badChannels = strtrim(strsplit(badChannelsStr, ','));
-                % Filter out any empty elements that might result from trailing commas
+            else
+                badChannels = strtrim(strsplit(userInput, ','));
                 badChannels = badChannels(~cellfun('isempty', badChannels));
-
-                % Validate format of each channel name
                 isInvalid = cellfun(@(c) isempty(regexp(c, '^E\d{3}$', 'once')), badChannels);
-
                 if any(isInvalid)
                     invalidNames = strjoin(badChannels(isInvalid), ', ');
-                    disp(['ERROR: The following channel names are invalid: ', invalidNames]);
-                    disp('Please use the format Exxx (e.g., E001, E023).');
-                    % Loop will continue
-                else
-                    mapKey = [SubjName '_' NightName];
-                    badChannelMap(mapKey) = badChannels;
-                    addLog(sprintf('Stored %d valid bad channels for %s.', numel(badChannels), mapKey));
-                    validInput = true;
+                    errorMsg = sprintf('Invalid channel names entered (%s). Use format Exxx.', invalidNames);
+                    addLog(errorMsg);
+                    error(errorMsg); %#ok<ERREM>
                 end
             end
+
+            badChannelMap(mapKey) = badChannels;
+            addLog(sprintf('Bad channels for %s: %s', mapKey, strjoin(badChannels, ',')));
         end
     end
 
@@ -312,16 +351,33 @@ function main()
         % For each selected night
         selectedNightsForSubj = selectedNights{iSubj};
         if isempty(selectedNightsForSubj)
-            addLog(sprintf('WARNING: No nights selected for subject=%s. Skipping subject nights.', SubjName));
-            continue; % Skip to next subject if no nights selected for this one
+            addLog(sprintf('WARNING: No nights selected for subject=%s. Skipping subject.', SubjName));
+            continue;
         end
 
-        for nightIdx = 1:numel(selectedNightsForSubj)
-            iN = selectedNightsForSubj(nightIdx);
+        % Enforce single-night processing here as well
+        effectiveNightIdx = [];
+        for idx = 1:numel(selectedNightsForSubj)
+            candidateIdx = selectedNightsForSubj(idx);
+            candidateName = subjects(iSubj).Nights(candidateIdx).NightName;
+            if strcmpi(candidateName, 'Night1')
+                effectiveNightIdx(end+1) = candidateIdx; %#ok<AGROW>
+            else
+                addLog(sprintf('Single-night mode: skipping %s for %s.', candidateName, SubjName));
+            end
+        end
+
+        if isempty(effectiveNightIdx)
+            addLog(sprintf('No Night1 entries available for %s. Skipping subject.', SubjName));
+            continue;
+        end
+
+        for nightIdx = 1:numel(effectiveNightIdx)
+            iN = effectiveNightIdx(nightIdx);
             NightName    = subjects(iSubj).Nights(iN).NightName;
             mainEEGFiles = subjects(iSubj).Nights(iN).MainEEGFiles;
             noiseEEGFile = subjects(iSubj).Nights(iN).NoiseEEGFile;
-            addLog(sprintf('Starting Night %d/%d: %s', nightIdx, numel(selectedNightsForSubj), NightName));
+            addLog(sprintf('Starting Night %d/%d: %s', nightIdx, numel(effectiveNightIdx), NightName));
 
 
             if isempty(mainEEGFiles)
