@@ -148,6 +148,11 @@ if execMode == 1
     do_sensor = ismember(modeChoice, [2, 3]);
     addLog(sprintf('Processing mode set: Source=%d, Sensor=%d', do_source, do_sensor));
 
+    if ~do_source
+        addLog('Source-space processing must be enabled for this workflow. Exiting.');
+        return;
+    end
+
     % --- Get Subjects and Nights from Protocol ---
     dataDir = fullfile(DbDir, selectedProtocolName, 'data');
     dirContents = dir(dataDir);
@@ -412,6 +417,9 @@ if execMode == 1
                 end
             end
 
+            addLog('Step 1 complete: stage averages projected to default anatomy.');
+            continue; % Skip automated comparisons (manual workflow beyond this point)
+
             % --- Step 2: Perform Comparisons ---
             addLog('Step 2: Performing power difference comparisons...');
             comparison_results = {}; % Cell array to store handles to the new results
@@ -497,6 +505,10 @@ if execMode == 1
             end
         end % End night loop
     end % End subject loop
+
+    addLog('Projected stage averages are ready. Continue with manual comparison and visualization steps.');
+    addLog('=== Comparison Pipeline End (manual continuation required) ===');
+    return;
 
     % --- GROUP ANALYSIS ---
     if do_group_analysis && do_source
