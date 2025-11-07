@@ -1,4 +1,4 @@
-function bst_comparison()
+function group_analysis()
     % BST_COMPARISON: Simplified post-processing to average and project sLORETA results.
     %
     % This streamlined workflow:
@@ -274,6 +274,113 @@ function bst_comparison()
             end
 
             addLog('Step 1 complete: stage averages projected to default anatomy.');
+        end
+    end
+
+    % --- Group-level selection and statistics ---
+    groupLookupPath = fullfile(scriptDir, 'Assets', 'group_lookup.json');
+    if ~exist(groupLookupPath, 'file')
+        addLog(sprintf('Group lookup not found at %s. Skipping group analyses.', groupLookupPath));
+    else
+        try
+            groupLookup = jsondecode(fileread(groupLookupPath));
+        catch ME
+            addLog(sprintf('ERROR: Failed to parse group lookup (%s). Error: %s', groupLookupPath, ME.message));
+            groupLookup = struct();
+        end
+
+        groupSubjects = fieldnames(groupLookup);
+        groupLabels = cellfun(@string, struct2cell(groupLookup), 'UniformOutput', false);
+        uniqueGroups = unique(string(groupLabels));
+
+        if ~isempty(uniqueGroups)
+            stagePairs = struct( ...
+                'name',    {'Stim_vs_Pre', 'Post_vs_Pre'}, ...
+                'stageA',  {'stim',        'post-stim'}, ...
+                'stageB',  {'pre-stim',    'pre-stim'});
+
+            if isempty(allNightNames)
+                allNightNames = {'Night1'};
+            end
+
+            for iNight = 1:numel(allNightNames)
+                nightName = allNightNames{iNight};
+                for iGroup = 1:numel(uniqueGroups)
+                    currentGroup = uniqueGroups(iGroup);
+                    groupMask = strcmpi(string(groupLabels), currentGroup);
+                    subjectsInGroup = intersect(SubjectNames, groupSubjects(groupMask));
+                    if isempty(subjectsInGroup)
+                        addLog(sprintf('No subjects available for group %s. Skipping.', currentGroup));
+                        continue;
+                    end
+
+                    for iPair = 1:numel(stagePairs)
+                        pair = stagePairs(iPair);
+                        condA = sprintf('%s_%s', nightName, pair.stageA);
+                        condB = sprintf('%s_%s', nightName, pair.stageB);
+
+                        sFilesA = {};
+                        sFilesB = {};
+
+                        for iSub = 1:numel(subjectsInGroup)
+                            subj = subjectsInGroup{iSub};
+
+                            filesA = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+                                'subjectname',   'Group_analysis', ...
+                                'condition',     condA, ...
+                                'tag',           subj, ...
+                                'includebad',    0, ...
+                                'includeintra',  0, ...
+                                'includecommon', 0, ...
+                                'outprocesstab', 'process2a');
+                            filesB = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+                                'subjectname',   'Group_analysis', ...
+                                'condition',     condB, ...
+                                'tag',           subj, ...
+                                'includebad',    0, ...
+                                'includeintra',  0, ...
+                                'includecommon', 0, ...
+                                'outprocesstab', 'process2b');
+
+                            if isempty(filesA) || isempty(filesB)
+                                addLog(sprintf('WARNING: Missing files for %s (%s). Skipping subject.', subj, pair.name));
+                                continue;
+                            end
+
+                            sFilesA{end+1} = filesA(1).FileName; %#ok<AGROW>
+                            sFilesB{end+1} = filesB(1).FileName; %#ok<AGROW>
+                        end
+
+                        if numel(sFilesA) < 2 || numel(sFilesB) < 2
+                            addLog(sprintf('Not enough data for %s %s (%s). Need >=2 subjects.', currentGroup, pair.name, nightName));
+                            continue;
+                        end
+
+                        if numel(sFilesA) ~= numel(sFilesB)
+                            addLog(sprintf('Unequal subject counts for %s %s. Skipping.', currentGroup, pair.name));
+                            continue;
+                        end
+
+                        addLog(sprintf('Running cluster t-test: %s %s (%s)', currentGroup, pair.name, nightName));
+                        statsResult = bst_process('CallProcess', 'process_ft_sourcestatistics', sFilesA, sFilesB, ...
+                            'timewindow',     [-0.05, 0.05], ...
+                            'scoutsel',       {}, ...
+                            'scoutfunc',      1, ...
+                            'isabs',          0, ...
+                            'avgtime',        0, ...
+                            'randomizations', 1000, ...
+                            'statistictype',  1, ...
+                            'tail',           'two', ...
+                            'correctiontype', 2, ...
+                            'minnbchan',      0, ...
+                            'clusteralpha',   0.05);
+
+                        if ~isempty(statsResult)
+                            addLog(sprintf('   => Cluster test saved: %s', statsResult(1).FileName));
+                        end
+                    end
+                end
+            end
         end
     end
 

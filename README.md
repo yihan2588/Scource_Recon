@@ -46,15 +46,15 @@ EEG_data/Subject_xxx/Night1/SourceRecon/
 ```
 A cumulative log is also written to `<STRENGTHEN>/recon_run.log`.
 
-## 2. Comparison Preparation (`bst_comparison.m`)
+## 2. Comparison Preparation (`group_analysis.m`)
 
-`bst_comparison.m` now stops after creating per-stage averages and projecting them to the default anatomy. This ensures the Brainstorm database contains the `_avg` and `_avg_projected` files needed for manual comparisons/visualisation.
+`group_analysis.m` now stops after creating per-stage averages and projecting them to the default anatomy. This ensures the Brainstorm database contains the `_avg` and `_avg_projected` files needed for manual comparisons/visualisation.
 
 ### Workflow
 
 1. Run the script:
    ```matlab
-   bst_comparison
+   group_analysis
    ```
 2. Choose execution mode **1** (the only supported option).
 3. Select the Brainstorm protocol and subjects to process.
@@ -62,6 +62,7 @@ A cumulative log is also written to `<STRENGTHEN>/recon_run.log`.
    - Collects all `sLORETA` results for each stage.
    - Creates `*_avg` files using mean absolute value across trials.
    - Projects those averages to the default anatomy (`*_avg_projected`).
+5. After subject-level processing, the script uses `Assets/group_lookup.json` to identify `Active` vs `SHAM` participants, aggregates their projected files inside Brainstorm’s `Group_analysis` subject, and runs fixed FT cluster-based t-tests for `Stim_vs_Pre` and `Post_vs_Pre` (Stim/Post assigned to Process2a, Pre to Process2b).
 
 After completion the log will state:
 ```
@@ -73,6 +74,7 @@ Continue inside Brainstorm with your preferred manual comparison pipeline (e.g.,
 
 - `Assets/bad_channels_lookup.json` — subject → comma-separated bad channels (E### format) used as defaults by `main.m`.
 - `Assets/fiducials_lookup.json` — optional per-subject fiducials used by `importAnatomy`. If a subject is missing, default fiducials are applied.
+- `Assets/group_lookup.json` — maps each subject ID to `Active` or `SHAM` for automated group comparisons in `group_analysis.m`.
 
 ## Manual Steps (Post-Script)
 
