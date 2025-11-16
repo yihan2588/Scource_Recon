@@ -31,6 +31,21 @@ function group_analysis()
 
     addLog('=== Comparison Pipeline Start ===');
 
+    runTimestamp = datestr(now, 'yyyymmdd_HHMMSS');
+    outputRootDir = fullfile(strengthenDir, 'GroupAnalysisOutputs');
+    if ~exist(outputRootDir, 'dir')
+        mkdir(outputRootDir);
+    end
+    runOutputDir = fullfile(outputRootDir, ['run_' runTimestamp]);
+    if ~exist(runOutputDir, 'dir')
+        mkdir(runOutputDir);
+    end
+    addLog(['Run outputs directory: ', runOutputDir]);
+
+    clusterAlpha = 0.05;          % Alpha used for cluster significance
+    allNightNames = {};
+    clusterStatisticOption = 2;   % 1=maxsum, 2=maxsize (default), 3=wcm
+
     % --- Execution mode ---
     disp(' ');
     disp('Select Execution Mode:');
@@ -373,10 +388,22 @@ function group_analysis()
                             'tail',           'one+', ...
                             'correctiontype', 2, ...
                             'minnbchan',      0, ...
-                            'clusteralpha',   0.05);
+                            'clusteralpha',   clusterAlpha, ...
+                            'clusterstatistic', clusterStatisticOption);
 
                         if ~isempty(statsResult)
                             addLog(sprintf('   => Cluster test saved: %s', statsResult(1).FileName));
+                            statFilesGenerated = {statsResult.FileName};
+                            outputs = build_group_analysis_outputs(statFilesGenerated, runOutputDir, clusterAlpha);
+                            if ~isempty(outputs)
+                                for iOut = 1:numel(outputs)
+                                    logSummary = sprintf('      Plot: %s | Summary JSON: %s | TXT: %s', ...
+                                        local_or_empty(outputs(iOut).distributionFigure), ...
+                                        local_or_empty(outputs(iOut).summaryJson), ...
+                                        local_or_empty(outputs(iOut).summaryTxt));
+                                    addLog(logSummary);
+                                end
+                            end
                         end
                     end
                 end
@@ -384,8 +411,17 @@ function group_analysis()
         end
     end
 
-    addLog('Projected stage averages are ready. Continue with manual comparison and visualization steps.');
-    addLog('=== Comparison Pipeline End (manual continuation required) ===');
+    addLog('Cluster statistics, plots, and summaries generated.');
+    addLog(['Outputs stored under: ', runOutputDir]);
+    addLog('=== Comparison Pipeline End ===');
     return;
 
+end
+
+function txt = local_or_empty(strVal)
+    if isempty(strVal)
+        txt = '<none>';
+    else
+        txt = strVal;
+    end
 end

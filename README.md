@@ -46,9 +46,9 @@ EEG_data/Subject_xxx/Night1/SourceRecon/
 ```
 A cumulative log is also written to `<STRENGTHEN>/recon_run.log`.
 
-## 2. Comparison Preparation (`group_analysis.m`)
+## 2. Group Analysis & FieldTrip Stats (`group_analysis.m`)
 
-`group_analysis.m` now stops after creating per-stage averages and projecting them to the default anatomy. This ensures the Brainstorm database contains the `_avg` and `_avg_projected` files needed for manual comparisons/visualisation.
+`group_analysis.m` prepares condition-level averages, launches FieldTrip cluster permutation statistics, and now generates post-hoc summaries/plots for every test run. The pipeline is fully scripted so you can go from subject-level averages to group-level reports in one pass.
 
 ### Workflow
 
@@ -62,13 +62,32 @@ A cumulative log is also written to `<STRENGTHEN>/recon_run.log`.
    - Collects all `sLORETA` results for each stage.
    - Creates `*_avg` files using mean absolute value across trials.
    - Projects those averages to the default anatomy (`*_avg_projected`).
-5. After subject-level processing, the script uses `Assets/group_lookup.json` to identify `Active` vs `SHAM` participants, aggregates their projected files inside Brainstorm’s `Group_analysis` subject, and runs fixed FT cluster-based t-tests for `Stim_vs_Pre` and `Post_vs_Pre` (Stim/Post assigned to Process2a, Pre to Process2b).
+5. After subject-level processing, the script uses `Assets/group_lookup.json` to identify `Active` vs `SHAM` participants, aggregates their projected files inside Brainstorm’s `Group_analysis` subject, and runs FieldTrip cluster-based permutation tests for `Stim_vs_Pre` and `Post_vs_Pre`.
 
-After completion the log will state:
-```
-Projected stage averages are ready. Continue with manual comparison and visualization steps.
-```
-Continue inside Brainstorm with your preferred manual comparison pipeline (e.g., create arithmetic contrasts, screenshots, or group analyses) using the newly generated `_avg_projected` files.
+### What’s new in the automated stats step
+
+- **Cluster statistic selection**: The workflow defaults to FieldTrip’s `clusterstatistic = maxsize`, but you can change the default near the top of `group_analysis.m`. The choice is logged for each run so you always know which statistic was used.
+- **Permutation distribution plots**: Every FieldTrip stat file now spawns `*_cluster_distribution.png`, which shows the positive/negative null distributions with the observed cluster statistics overlaid. Significant clusters are coloured in green.
+- **Cluster summaries**: For each stat file we export `*_cluster_summary.json`, `*_cluster_summary.mat`, and a human-readable `*_cluster_summary.txt`. These reports list cluster p-values, sizes, and atlas overlaps (or scout labels if ROI averages were used), plus centroid coordinates.
+- **Structured output tree**: All artefacts are saved under `<STRENGTHEN>/GroupAnalysisOutputs/run_yyyymmdd_HHMMSS/`, making it straightforward to version and compare different analyses. The log file records the run folder along with every generated asset.
+
+### Outputs per statistical contrast
+
+Inside the run directory you will find, for each FieldTrip result (`*.mat` stat file):
+
+- `<statname>_cluster_distribution.png`
+- `<statname>_cluster_summary.json`
+- `<statname>_cluster_summary.mat`
+- `<statname>_cluster_summary.txt`
+
+Each asset is referenced in the log with absolute paths.
+
+### Logs
+
+- Source reconstruction log: `<STRENGTHEN>/recon_run.log`
+- Group analysis log: `<STRENGTHEN>/comparison_run.log`
+
+Both logs capture timestamps, parameter choices, and output locations to aid reproducibility.
 
 ## Configuration Files
 
@@ -76,14 +95,12 @@ Continue inside Brainstorm with your preferred manual comparison pipeline (e.g.,
 - `Assets/fiducials_lookup.json` — optional per-subject fiducials used by `importAnatomy`. If a subject is missing, default fiducials are applied.
 - `Assets/group_lookup.json` — maps each subject ID to `Active` or `SHAM` for automated group comparisons in `group_analysis.m`.
 
-## Manual Steps (Post-Script)
+## Manual Post-Processing
 
-- Review the exported screenshots and CSV summaries for each stage to verify there are no anomalies (misaligned sensors, empty scouts, etc.).
-- Use Brainstorm’s GUIs to build power comparisons, group averages, and contact sheets based on the `_avg_projected` files.
+After `group_analysis.m` completes you can dive into Brainstorm for interactive review:
 
-## Logs
+- Inspect the generated plots and summaries to spot interesting clusters quickly.
+- Use Brainstorm’s GUI to build additional contrasts or visualisations on top of the `*_avg_projected` files.
+- The atlas overlap tables can guide ROI-focused follow-up analyses.
 
-- Source reconstruction log: `<STRENGTHEN>/recon_run.log`
-- Comparison preparation log: `<STRENGTHEN>/comparison_run.log`
-
-Both logs capture timestamps and high-level status messages to aid troubleshooting.
+With these additions, the scripted workflow now covers: subject-level averaging, source projection, FieldTrip cluster permutation tests, distribution plots, cluster anatomical summaries, and organised reporting. Adjust the defaults in `group_analysis.m` if you need to tweak FieldTrip parameters for other projects.
