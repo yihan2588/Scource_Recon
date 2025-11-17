@@ -365,14 +365,21 @@ function group_analysis()
                             continue;
                         end
 
-                        addLog(sprintf('Running cluster t-test: %s %s (%s)', currentGroup, pair.name, nightName));
+                        subjectsProvided = numel(subjectsInGroup);
+                        subjectsUsed = numel(sFilesA);
+                        if subjectsUsed ~= subjectsProvided
+                            addLog(sprintf('NOTE: Using %d/%d subjects for %s %s (%s) due to missing projected files.', subjectsUsed, subjectsProvided, currentGroup, pair.name, nightName));
+                        end
+                        nRandBase = max(subjectsUsed, subjectsProvided);
+                        nRand = max(1, nRandBase ^ 2);
+                        addLog(sprintf('Running cluster t-test: %s %s (%s) with %d permutations (subjects used=%d)', currentGroup, pair.name, nightName, nRand, subjectsUsed));
                         statsResult = bst_process('CallProcess', 'process_ft_sourcestatistics', sFilesA, sFilesB, ...
                             'timewindow',     [0, 0], ...
                             'scoutsel',       {}, ...
                             'scoutfunc',      1, ...
                             'isabs',          0, ...
                             'avgtime',        0, ...
-                            'randomizations', 1000, ...
+                            'randomizations', nRand, ...
                             'statistictype',  1, ...
                             'tail',           'one+', ...
                             'correctiontype', 2, ...
@@ -425,8 +432,9 @@ function fileStruct = select_projected_subject_file(subj, conditionName, project
         return;
     end
 
-    % Filter to the specific subject tagged during projection
-    subjMatches = arrayfun(@(f) contains(f.Comment, subj, 'IgnoreCase', true), sFiles);
+    % Filter to the specific subject tagged during projection. Some comments use "<Stage> | <Subject>" order, so check both patterns.
+    subj = string(subj);
+    subjMatches = arrayfun(@(f) local_comment_matches_subject(f.Comment, subj), sFiles);
     sFiles = sFiles(subjMatches);
 
     if isempty(sFiles)
@@ -434,13 +442,36 @@ function fileStruct = select_projected_subject_file(subj, conditionName, project
         return;
     end
 
-    % Select the most recent file if multiple remain
+    % Select the most recent file if metadata is available; otherwise take the last entry
     if numel(sFiles) > 1
-        [~, idxNewest] = max(datenum({sFiles.LastModified}));
-        fileStruct = sFiles(idxNewest);
+        if all(isfield(sFiles, 'LastModified'))
+            try
+                [~, idxNewest] = max(datenum({sFiles.LastModified}));
+                fileStruct = sFiles(idxNewest);
+                return;
+            catch
+                % Fall through to default selection if timestamps cannot be parsed
+            end
+        end
+        fileStruct = sFiles(end);
     else
         fileStruct = sFiles(1);
     end
+end
+
+function isMatch = local_comment_matches_subject(commentStr, subj)
+    if isempty(commentStr)
+        isMatch = false;
+        return;
+    end
+
+    tokens = split(string(commentStr), "|");
+    tokens = strtrim(tokens);
+
+    subjectMatches = strcmpi(tokens, subj) | contains(tokens, subj, 'IgnoreCase', true);
+    directMatch = contains(commentStr, subj, 'IgnoreCase', true);
+
+    isMatch = any(subjectMatches) || directMatch;
 end
 
 function txt = local_or_empty(strVal)
