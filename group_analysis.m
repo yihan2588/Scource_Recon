@@ -337,33 +337,22 @@ function group_analysis()
                         sFilesA = {};
                         sFilesB = {};
 
+                        projectedTagA = [pair.stageA, '_avg_projected'];
+                        projectedTagB = [pair.stageB, '_avg_projected'];
+
                         for iSub = 1:numel(subjectsInGroup)
                             subj = subjectsInGroup{iSub};
 
-                            filesA = bst_process('CallProcess', 'process_select_files_results', [], [], ...
-                                'subjectname',   'Group_analysis', ...
-                                'condition',     condA, ...
-                                'tag',           subj, ...
-                                'includebad',    0, ...
-                                'includeintra',  0, ...
-                                'includecommon', 0, ...
-                                'outprocesstab', 'process2a');
-                            filesB = bst_process('CallProcess', 'process_select_files_results', [], [], ...
-                                'subjectname',   'Group_analysis', ...
-                                'condition',     condB, ...
-                                'tag',           subj, ...
-                                'includebad',    0, ...
-                                'includeintra',  0, ...
-                                'includecommon', 0, ...
-                                'outprocesstab', 'process2b');
+                            fileA = select_projected_subject_file(subj, condA, projectedTagA, 'process2a');
+                            fileB = select_projected_subject_file(subj, condB, projectedTagB, 'process2b');
 
-                            if isempty(filesA) || isempty(filesB)
-                                addLog(sprintf('WARNING: Missing files for %s (%s). Skipping subject.', subj, pair.name));
+                            if isempty(fileA) || isempty(fileB)
+                                addLog(sprintf('WARNING: Missing projected files for %s (%s). Skipping subject.', subj, pair.name));
                                 continue;
                             end
 
-                            sFilesA{end+1} = filesA(1).FileName; %#ok<AGROW>
-                            sFilesB{end+1} = filesB(1).FileName; %#ok<AGROW>
+                            sFilesA{end+1} = fileA.FileName; %#ok<AGROW>
+                            sFilesB{end+1} = fileB.FileName; %#ok<AGROW>
                         end
 
                         if numel(sFilesA) < 2 || numel(sFilesB) < 2
@@ -416,6 +405,42 @@ function group_analysis()
     addLog('=== Comparison Pipeline End ===');
     return;
 
+end
+
+function fileStruct = select_projected_subject_file(subj, conditionName, projectedTag, processTab)
+    % Helper to select a single projected file for a subject-condition pair.
+    % Prefers the newest matching entry if duplicates exist.
+
+    sFiles = bst_process('CallProcess', 'process_select_files_results', [], [], ...
+        'subjectname',   'Group_analysis', ...
+        'condition',     conditionName, ...
+        'tag',           projectedTag, ...
+        'includebad',    0, ...
+        'includeintra',  0, ...
+        'includecommon', 0, ...
+        'outprocesstab', processTab);
+
+    if isempty(sFiles)
+        fileStruct = struct();
+        return;
+    end
+
+    % Filter to the specific subject tagged during projection
+    subjMatches = arrayfun(@(f) contains(f.Comment, subj, 'IgnoreCase', true), sFiles);
+    sFiles = sFiles(subjMatches);
+
+    if isempty(sFiles)
+        fileStruct = struct();
+        return;
+    end
+
+    % Select the most recent file if multiple remain
+    if numel(sFiles) > 1
+        [~, idxNewest] = max(datenum({sFiles.LastModified}));
+        fileStruct = sFiles(idxNewest);
+    else
+        fileStruct = sFiles(1);
+    end
 end
 
 function txt = local_or_empty(strVal)
