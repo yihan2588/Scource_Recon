@@ -388,9 +388,20 @@ function group_analysis()
                             'clusterstatistic', clusterStatisticOption);
 
                         if ~isempty(statsResult)
-                            addLog(sprintf('   => Cluster test saved: %s', statsResult(1).FileName));
+                            % Apply group/stage tag to the newly created stat maps BEFORE logging
+                            statTag = sprintf('%s_%s_%s', currentGroup, pair.name, nightName);
+                            try
+                                bst_process('CallProcess', 'process_add_tag', statsResult, [], ...
+                                    'tag',      statTag, ...
+                                    'output',   'name');
+                                addLog(sprintf('   => Cluster test saved and tagged (%s): %s', statTag, statsResult(1).FileName));
+                            catch ME_tag
+                                addLog(sprintf('WARNING: Cluster test saved but failed to tag %s (%s): %s', statsResult(1).FileName, statTag, ME_tag.message));
+                            end
+
                             statFilesGenerated = {statsResult.FileName};
-                            outputs = build_group_analysis_outputs(statFilesGenerated, runOutputDir, clusterAlpha);
+                            contextLabel = statTag;
+                            outputs = build_group_analysis_outputs(statFilesGenerated, runOutputDir, clusterAlpha, contextLabel);
                             if ~isempty(outputs)
                                 for iOut = 1:numel(outputs)
                                     logSummary = sprintf('      Plot: %s | Summary JSON: %s | TXT: %s', ...
@@ -401,6 +412,8 @@ function group_analysis()
                                 end
                             end
                         end
+
+
                     end
                 end
             end
