@@ -1,4 +1,46 @@
-function group_analysis()
+function group_analysis(opts)
+    if nargin < 1 || isempty(opts)
+        opts = struct();
+    elseif ~isstruct(opts)
+        error('group_analysis:InvalidInput', 'Options input must be provided as a struct.');
+    end
+
+    hasField = @(name) isfield(opts, name) && ~isempty(opts.(name));
+
+    subjectNamesOverride = {};
+    if hasField('subjectNames')
+        subjVal = opts.subjectNames;
+        if ischar(subjVal)
+            subjectNamesOverride = {subjVal};
+        elseif isstring(subjVal)
+            subjectNamesOverride = cellstr(subjVal(:));
+        elseif iscell(subjVal)
+            subjectNamesOverride = cellfun(@(c) char(string(c)), subjVal(:), 'UniformOutput', false);
+        else
+            error('group_analysis:InvalidInput', 'subjectNames must be a character vector, string, or cell array of strings.');
+        end
+    end
+
+    execModeOverride = [];
+    if hasField('execMode')
+        execModeOverride = opts.execMode;
+    end
+
+    processingModeOverride = [];
+    if hasField('processingMode')
+        processingModeOverride = opts.processingMode;
+    end
+
+    protocolOverride = '';
+    if hasField('protocolName')
+        protocolOverride = char(string(opts.protocolName));
+    end
+
+    strengthenOverride = '';
+    if hasField('strengthenDir')
+        strengthenOverride = char(string(opts.strengthenDir));
+    end
+
     % BST_COMPARISON: Simplified post-processing to average and project sLORETA results.
     %
     % This streamlined workflow:
@@ -10,9 +52,23 @@ function group_analysis()
     %   4) Stops, leaving any comparisons/visualisation to be done manually in Brainstorm.
 
     % --- Setup ---
-    strengthenDir = input('Enter the path to the STRENGTHEN folder: ', 's');
-    if isempty(strengthenDir) || ~exist(strengthenDir, 'dir')
-        error('STRENGTHEN directory not found or invalid. Exiting.');
+    automatedMode = ~isempty(strengthenOverride) || ~isempty(protocolOverride) || ~isempty(subjectNamesOverride) || ~isempty(execModeOverride) || ~isempty(processingModeOverride);
+
+    if ~isempty(strengthenOverride)
+        strengthenDir = strengthenOverride;
+        if ~exist(strengthenDir, 'dir')
+            error('group_analysis:InvalidStrengthenDir', 'Provided STRENGTHEN directory not found: %s', strengthenDir);
+        end
+    else
+        strengthenDir = '';
+        while isempty(strengthenDir) || ~exist(strengthenDir, 'dir')
+            strengthenDir = strtrim(input('Enter the path to the STRENGTHEN folder: ', 's'));
+            if isempty(strengthenDir)
+                disp('STRENGTHEN directory path cannot be empty.');
+            elseif ~exist(strengthenDir, 'dir')
+                disp(['STRENGTHEN directory not found: ', strengthenDir]);
+            end
+        end
     end
 
     scriptDir = fileparts(mfilename('fullpath'));
@@ -47,22 +103,34 @@ function group_analysis()
     clusterStatisticOption = 2;   % 1=maxsum, 2=maxsize (default), 3=wcm
 
     % --- Execution mode ---
-    disp(' ');
-    disp('Select Execution Mode:');
-    disp('1: Average + Project (recommended)');
-    disp('2: Screenshot a Single Result');
-    execMode = -1;
-    while ~ismember(execMode, [1, 2])
-        try
-            execModeStr = input('Enter your choice (1-2) [1]: ', 's');
-            if isempty(execModeStr), execModeStr = '1'; end
-            execMode = str2double(execModeStr);
-            if ~ismember(execMode, [1, 2])
-                disp('Invalid choice.');
-            end
-        catch
-            disp('Invalid input.');
+    if ~isempty(execModeOverride)
+        execMode = execModeOverride;
+        if ~ismember(execMode, [1, 2])
+            error('group_analysis:InvalidExecMode', 'Execution mode override must be 1 or 2.');
         end
+        addLog(sprintf('Execution mode override set to %d.', execMode));
+    elseif automatedMode
+        execMode = 1;
+        addLog('Execution mode defaulted to 1 (Average + Project) for automated run.');
+    else
+        disp(' ');
+        disp('Select Execution Mode:');
+        disp('1: Average + Project (recommended)');
+        disp('2: Screenshot a Single Result');
+        execMode = -1;
+        while ~ismember(execMode, [1, 2])
+            try
+                execModeStr = input('Enter your choice (1-2) [1]: ', 's');
+                if isempty(execModeStr), execModeStr = '1'; end
+                execMode = str2double(execModeStr);
+                if ~ismember(execMode, [1, 2])
+                    disp('Invalid choice.');
+                end
+            catch
+                disp('Invalid input.');
+            end
+        end
+        addLog(sprintf('Execution mode selected interactively: %d.', execMode));
     end
 
     if ~brainstorm('status')
@@ -104,52 +172,75 @@ function group_analysis()
         return;
     end
 
-    disp('=== Select the Protocol to Analyze ===');
     protocolNames = sort(protocolNames);
-    for i = 1:numel(protocolNames)
-        disp([num2str(i) ': ' protocolNames{i}]);
-    end
 
-    choiceNum = -1;
-    while choiceNum < 1 || choiceNum > numel(protocolNames)
-        try
-            choiceStr = input(['Select protocol number (1-' num2str(numel(protocolNames)) '): '], 's');
-            choiceNum = str2double(choiceStr);
-            if isnan(choiceNum) || floor(choiceNum) ~= choiceNum
+    if ~isempty(protocolOverride)
+        matchIdx = find(strcmpi(protocolNames, protocolOverride), 1);
+        if isempty(matchIdx)
+            error('group_analysis:ProtocolNotFound', 'Protocol "%s" not found in Brainstorm database.', protocolOverride);
+        end
+        selectedProtocolName = protocolNames{matchIdx};
+        addLog(sprintf('Protocol override matched: %s', selectedProtocolName));
+    else
+        disp('=== Select the Protocol to Analyze ===');
+        for i = 1:numel(protocolNames)
+            disp([num2str(i) ': ' protocolNames{i}]);
+        end
+
+        choiceNum = -1;
+        while choiceNum < 1 || choiceNum > numel(protocolNames)
+            try
+                choiceStr = input(['Select protocol number (1-' num2str(numel(protocolNames)) '): '], 's');
+                choiceNum = str2double(choiceStr);
+                if isnan(choiceNum) || floor(choiceNum) ~= choiceNum
+                    choiceNum = -1;
+                    disp('Invalid input.');
+                end
+            catch
                 choiceNum = -1;
                 disp('Invalid input.');
             end
-        catch
-            choiceNum = -1;
-            disp('Invalid input.');
         end
+
+        selectedProtocolName = protocolNames{choiceNum};
     end
 
-    selectedProtocolName = protocolNames{choiceNum};
     iProtocol = bst_get('Protocol', selectedProtocolName);
     gui_brainstorm('SetCurrentProtocol', iProtocol);
     addLog(['Selected protocol: ', selectedProtocolName]);
 
     % --- Processing mode (must include source space) ---
-    disp(' ');
-    disp('Select processing mode:');
-    disp('1: Source space only');
-    disp('2: Sensor space only');
-    disp('3: Both');
-    modeChoice = -1;
-    while ~ismember(modeChoice, [1, 2, 3])
-        try
-            modeChoiceStr = input('Enter your choice (1-3) [1]: ', 's');
-            if isempty(modeChoiceStr)
-                modeChoiceStr = '1';
-            end
-            modeChoice = str2double(modeChoiceStr);
-            if ~ismember(modeChoice, [1, 2, 3])
+    if ~isempty(processingModeOverride)
+        modeChoice = processingModeOverride;
+        if ~ismember(modeChoice, [1, 2, 3])
+            error('group_analysis:InvalidProcessingMode', 'Processing mode override must be 1, 2, or 3.');
+        end
+        addLog(sprintf('Processing mode override set to %d.', modeChoice));
+    elseif automatedMode
+        modeChoice = 1;
+        addLog('Processing mode defaulted to 1 (Source space only) for automated run.');
+    else
+        disp(' ');
+        disp('Select processing mode:');
+        disp('1: Source space only');
+        disp('2: Sensor space only');
+        disp('3: Both');
+        modeChoice = -1;
+        while ~ismember(modeChoice, [1, 2, 3])
+            try
+                modeChoiceStr = input('Enter your choice (1-3) [1]: ', 's');
+                if isempty(modeChoiceStr)
+                    modeChoiceStr = '1';
+                end
+                modeChoice = str2double(modeChoiceStr);
+                if ~ismember(modeChoice, [1, 2, 3])
+                    disp('Invalid choice. Please enter 1, 2, or 3.');
+                end
+            catch
                 disp('Invalid choice. Please enter 1, 2, or 3.');
             end
-        catch
-            disp('Invalid choice. Please enter 1, 2, or 3.');
         end
+        addLog(sprintf('Processing mode selected interactively: %d.', modeChoice));
     end
 
     do_source = ismember(modeChoice, [1, 3]);
@@ -176,30 +267,38 @@ function group_analysis()
     end
     disp([num2str(numel(SubjectNames) + 1) ': Process All Subjects']);
 
-    selectedIndices = [];
-    while isempty(selectedIndices)
-        try
-            choiceStr = input(['Enter subject numbers to process (e.g., 1,3,5) or ' num2str(numel(SubjectNames) + 1) ' for all [all]: '], 's');
-            if isempty(choiceStr)
-                choiceStr = num2str(numel(SubjectNames) + 1);
-            end
-
-            if str2double(choiceStr) == (numel(SubjectNames) + 1)
-                selectedIndices = 1:numel(SubjectNames);
-            else
-                selectedIndices = str2num(choiceStr); %#ok<ST2NM>
-                if any(selectedIndices < 1) || any(selectedIndices > numel(SubjectNames)) || any(floor(selectedIndices) ~= selectedIndices)
-                    disp('Invalid selection. Please enter valid numbers from the list.');
-                    selectedIndices = [];
-                end
-            end
-        catch
-            disp('Invalid input format.');
-            selectedIndices = [];
+    if ~isempty(subjectNamesOverride)
+        SubjectNames = intersect(SubjectNames, subjectNamesOverride, 'stable');
+        if isempty(SubjectNames)
+            error('group_analysis:NoSubjects', 'None of the provided subjects exist in the selected protocol.');
         end
-    end
+        addLog(sprintf('Subject override applied: %s', strjoin(SubjectNames, ', ')));
+    else
+        selectedIndices = [];
+        while isempty(selectedIndices)
+            try
+                choiceStr = input(['Enter subject numbers to process (e.g., 1,3,5) or ' num2str(numel(SubjectNames) + 1) ' for all [all]: '], 's');
+                if isempty(choiceStr)
+                    choiceStr = num2str(numel(SubjectNames) + 1);
+                end
 
-    SubjectNames = SubjectNames(selectedIndices);
+                if str2double(choiceStr) == (numel(SubjectNames) + 1)
+                    selectedIndices = 1:numel(SubjectNames);
+                else
+                    selectedIndices = str2num(choiceStr); %#ok<ST2NM>
+                    if any(selectedIndices < 1) || any(selectedIndices > numel(SubjectNames)) || any(floor(selectedIndices) ~= selectedIndices)
+                        disp('Invalid selection. Please enter valid numbers from the list.');
+                        selectedIndices = [];
+                    end
+                end
+            catch
+                disp('Invalid input format.');
+                selectedIndices = [];
+            end
+        end
+
+        SubjectNames = SubjectNames(selectedIndices);
+    end
     addLog(sprintf('Selected %d subjects to process: %s', numel(SubjectNames), strjoin(SubjectNames, ', ')));
 
     for iSubj = 1:numel(SubjectNames)
@@ -220,7 +319,12 @@ function group_analysis()
             end
         end
         uniqueNightNames = unique(nightNames);
+        if isempty(uniqueNightNames)
+            addLog(sprintf('No night folders detected for %s. Skipping subject.', SubjName));
+            continue;
+        end
         addLog(sprintf('Found nights for %s: %s', SubjName, strjoin(uniqueNightNames, ', ')));
+        allNightNames = union(allNightNames, uniqueNightNames, 'stable');
 
         for iNight = 1:numel(uniqueNightNames)
             NightName = uniqueNightNames{iNight};
@@ -320,6 +424,7 @@ function group_analysis()
 
             for iNight = 1:numel(allNightNames)
                 nightName = allNightNames{iNight};
+                addLog(sprintf('Evaluating group statistics for night: %s', nightName));
                 for iGroup = 1:numel(uniqueGroups)
                     currentGroup = uniqueGroups(iGroup);
                     groupMask = strcmpi(string(groupLabels), currentGroup);

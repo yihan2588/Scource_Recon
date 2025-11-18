@@ -37,6 +37,8 @@ main
 
 Follow the prompts. When asked for bad channels you may press Enter to accept the defaults loaded from `Assets/bad_channels_lookup.json`.
 
+At the end of the subject-level processing, the script now asks whether you want to launch the automated group analysis. Answering **y** reuses the Brainstorm protocol, STRENGTHEN path, and subject list you already selected, then runs `group_analysis` in non-interactive mode (avg + project, source-space only). Answering **n** keeps the previous manual workflow.
+
 Outputs (per subject/Night1):
 ```
 EEG_data/Subject_xxx/Night1/SourceRecon/

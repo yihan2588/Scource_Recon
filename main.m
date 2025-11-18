@@ -801,7 +801,47 @@ function main()
 
             addLog(['DONE with subject=', SubjName, ' night=', NightName,'-------------------------------']);
         end % End NIGHT LOOP (nightIdx)
+
+        if subjectProcessed
+            processedSubjectNames{end+1} = SubjName; %#ok<AGROW>
+        end
     end % End SUBJECT LOOP (subIdx)
+
+    % Prompt for optional group analysis run if any subjects were processed
+    runGroupAnalysis = '';
+    while true
+        runGroupAnalysis = lower(strtrim(input('Do group analysis after source reconstruction? (y/n): ', 's')));
+        if isempty(runGroupAnalysis)
+            runGroupAnalysis = 'n';
+        end
+        if any(runGroupAnalysis == ['y','n'])
+            break;
+        else
+            disp('Please enter ''y'' or ''n''.');
+        end
+    end
+
+    if runGroupAnalysis == 'y'
+        if isempty(processedSubjectNames)
+            addLog('No subjects were fully processed. Skipping automated group analysis.');
+        else
+            groupOpts = struct( ...
+                'strengthenDir', userDir, ...
+                'protocolName', selectedProtocolName, ...
+                'subjectNames', {processedSubjectNames}, ...
+                'execMode', 1, ...
+                'processingMode', 1);
+            addLog(sprintf('Launching automated group analysis for %d subject(s): %s', numel(processedSubjectNames), strjoin(processedSubjectNames, ', ')));
+            try
+                group_analysis(groupOpts);
+                addLog('Automated group analysis completed successfully.');
+            catch ME_group
+                addLog(sprintf('ERROR running automated group analysis: %s', ME_group.message));
+            end
+        end
+    else
+        addLog('User opted to skip automated group analysis.');
+    end
 
     % 4) Final log message
     addLog('=== Pipeline End ===');
