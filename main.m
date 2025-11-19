@@ -319,6 +319,24 @@ function main()
         return;
     end
 
+    % Initialize tracking variables for group analysis
+    processedSubjectNames = {};
+
+    % Prompt for group analysis BEFORE starting source reconstruction
+    runGroupAnalysisLater = '';
+    while true
+        runGroupAnalysisLater = lower(strtrim(input('Do group analysis after source reconstruction? (y/n): ', 's')));
+        if isempty(runGroupAnalysisLater)
+            runGroupAnalysisLater = 'n';
+        end
+        if any(runGroupAnalysisLater == ['y','n'])
+            break;
+        else
+            disp('Please enter ''y'' or ''n''.');
+        end
+    end
+    addLog(sprintf('Group analysis option: %s', runGroupAnalysisLater));
+
     % Loop over selected subjects
     for subIdx = 1:numel(selectedSubjects)
         iSubj = selectedSubjects(subIdx);
@@ -327,6 +345,7 @@ function main()
         capturedHeadModelFullPath = ''; % Initialize path for head model copying (using full path now)
         didHeadModel = false; % Initialize for head model computation
         firstStageCondForSubject = ''; % Capture the condition of the first file processed for HM
+        subjectProcessed = false; % Track if subject completes at least one stage
 
         addLog(sprintf('Starting Subject %d/%d: %s', subIdx, numel(selectedSubjects), SubjName));
 
@@ -557,6 +576,10 @@ function main()
             end
 
             % --- Operations that need to run for EACH stage condition processed this night ---
+            if ~isempty(processedStageConditions)
+                subjectProcessed = true;
+            end
+
             for iStageCond = 1:numel(processedStageConditions)
                 currentStageCond = processedStageConditions{iStageCond};
                 addLog(sprintf('Processing Stage Condition: %s', currentStageCond));
@@ -799,7 +822,7 @@ function main()
 
             end % End stage condition loop
 
-            addLog(['DONE with subject=', SubjName, ' night=', NightName,'-------------------------------']);
+                addLog(['DONE with subject=', SubjName, ' night=', NightName,'-------------------------------']);
         end % End NIGHT LOOP (nightIdx)
 
         if subjectProcessed
@@ -807,21 +830,8 @@ function main()
         end
     end % End SUBJECT LOOP (subIdx)
 
-    % Prompt for optional group analysis run if any subjects were processed
-    runGroupAnalysis = '';
-    while true
-        runGroupAnalysis = lower(strtrim(input('Do group analysis after source reconstruction? (y/n): ', 's')));
-        if isempty(runGroupAnalysis)
-            runGroupAnalysis = 'n';
-        end
-        if any(runGroupAnalysis == ['y','n'])
-            break;
-        else
-            disp('Please enter ''y'' or ''n''.');
-        end
-    end
-
-    if runGroupAnalysis == 'y'
+    % Execute group analysis based on earlier user choice
+    if runGroupAnalysisLater == 'y'
         if isempty(processedSubjectNames)
             addLog('No subjects were fully processed. Skipping automated group analysis.');
         else
