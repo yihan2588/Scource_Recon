@@ -100,7 +100,6 @@ function group_analysis(opts)
 
     clusterAlpha = 0.05;          % Alpha used for cluster significance
     allNightNames = {};
-    clusterStatisticOption = 2;   % 1=maxsum, 2=maxsize (default), 3=wcm
 
     % --- Execution mode ---
     if ~isempty(execModeOverride)
@@ -301,6 +300,67 @@ function group_analysis(opts)
     end
     addLog(sprintf('Selected %d subjects to process: %s', numel(SubjectNames), strjoin(SubjectNames, ', ')));
 
+    % --- User Configuration for Statistics ---
+    if automatedMode
+        clusterStatisticOption = 2;   % Default for automated mode
+        nRandUser = -1;  % -1 means use automatic calculation
+        addLog('Cluster statistic method defaulted to maxsize (2) for automated run.');
+        addLog('Number of randomizations will be calculated automatically based on subjects.');
+    else
+        disp(' ');
+        disp('=== Cluster Statistic Configuration ===');
+        disp('Select cluster statistic method:');
+        disp('1: maxsum (sum of t-values in cluster)');
+        disp('2: maxsize (count of significant samples) - Default');
+        disp('3: wcm (weighted cluster mass)');
+        
+        clusterStatisticOption = -1;
+        while ~ismember(clusterStatisticOption, [1, 2, 3])
+            try
+                choiceStr = input('Enter your choice (1-3) [2]: ', 's');
+                if isempty(choiceStr), choiceStr = '2'; end
+                clusterStatisticOption = str2double(choiceStr);
+                if ~ismember(clusterStatisticOption, [1, 2, 3])
+                    disp('Invalid choice. Please enter 1, 2, or 3.');
+                end
+            catch
+                disp('Invalid input.');
+            end
+        end
+        
+        methodNames = {'maxsum', 'maxsize', 'wcm'};
+        addLog(sprintf('Cluster statistic method: %s', methodNames{clusterStatisticOption}));
+        
+        % Number of randomizations
+        disp(' ');
+        disp('Number of randomizations can be:');
+        disp('  - Specified manually (recommended >= 1000)');
+        disp('  - Calculated automatically based on number of subjects (2^n)');
+        nRandUser = -1;
+        while nRandUser < 0
+            try
+                nRandStr = input('Enter number of randomizations [auto]: ', 's');
+                if isempty(nRandStr) || strcmpi(nRandStr, 'auto')
+                    nRandUser = -1;  % Use automatic calculation
+                    break;
+                end
+                nRandUser = str2double(nRandStr);
+                if isnan(nRandUser) || nRandUser < 100
+                    disp('Please enter a number >= 100, or press Enter for automatic calculation.');
+                    nRandUser = -1;
+                end
+            catch
+                disp('Invalid input.');
+            end
+        end
+        
+        if nRandUser == -1
+            addLog('Number of randomizations will be calculated automatically (2^n based on subjects).');
+        else
+            addLog(sprintf('Number of randomizations set to: %d', nRandUser));
+        end
+    end
+
     for iSubj = 1:numel(SubjectNames)
         SubjName = SubjectNames{iSubj};
         addLog(sprintf('--- Starting Subject %d/%d: %s ---', iSubj, numel(SubjectNames), SubjName));
@@ -475,8 +535,16 @@ function group_analysis(opts)
                         if subjectsUsed ~= subjectsProvided
                             addLog(sprintf('NOTE: Using %d/%d subjects for %s %s (%s) due to missing projected files.', subjectsUsed, subjectsProvided, currentGroup, pair.name, nightName));
                         end
-                        nRandBase = max(subjectsUsed, subjectsProvided);
-                        nRand = max(1, 2 ^ nRandBase);
+                        
+                        % Determine number of randomizations
+                        if nRandUser == -1
+                            % Automatic calculation based on subjects
+                            nRandBase = max(subjectsUsed, subjectsProvided);
+                            nRand = max(1, 2 ^ nRandBase);
+                        else
+                            % Use user-specified value
+                            nRand = nRandUser;
+                        end
                         addLog(sprintf('Running cluster t-test: %s %s (%s) with %d permutations (subjects used=%d)', currentGroup, pair.name, nightName, nRand, subjectsUsed));
                         statsResult = bst_process('CallProcess', 'process_ft_sourcestatistics', sFilesA, sFilesB, ...
                             'timewindow',     [0, 0], ...
