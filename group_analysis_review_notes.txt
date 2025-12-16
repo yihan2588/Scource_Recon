@@ -1,7 +1,0 @@
-Summary of issues detected in current diff for group_analysis.m:
-
-1. The new block assumes subjectStageResults.(SubjName).(NightName) exists prior to the loop, but in the original code subjectStageResults is populated during the stage averaging step. Either ensure this structure is populated before it is accessed or add guard logic when accessing reportedStages.
-
-2. The diff removed the logic that explicitly loops through the predefined stages (pre-stim, stim, post-stim) and performs averaging/projection. Before re-enabling, check that averaging still occurs earlier and no regressions are introduced.
-
-3. The new logging and restructuring is good to keep, but verify that the pipeline continues to create stage averages for all necessary conditions.

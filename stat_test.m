@@ -50,8 +50,8 @@ function stat_test()
     disp(' ');
     disp('=== Cluster Statistic Configuration ===');
     disp('Select cluster statistic method:');
-    disp('1: maxsum (sum of t-values in cluster) - Most common');
-    disp('2: maxsize (count of significant samples)');
+    disp('1: maxsum (sum of all vertexe t-values in cluster)');
+    disp('2: maxsize (count of vertexes in cluster)');
     disp('3: wcm (weighted cluster mass)');
     
     clusterStatisticOption = -1;
