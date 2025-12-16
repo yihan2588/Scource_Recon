@@ -1,176 +1,158 @@
-function [figPath, metadata] = plot_cluster_distribution(statFullPath, outputDir, alpha)
-%PLOT_CLUSTER_DISTRIBUTION Plot permutation distributions for Brainstorm stat files.
-%   [figPath, metadata] = plot_cluster_distribution(statFullPath, outputDir, alpha)
-%   loads the Brainstorm statistics file located at STATFULLPATH, extracts the
-%   positive and negative permutation distributions stored in StatClusters, and
-%   writes a two-panel figure to OUTPUTDIR that overlays the observed cluster
-%   statistics with the null distributions. Clusters with p-values <= ALPHA are
-%   highlighted in green, while non-significant clusters are drawn in grey. The
-%   function returns the saved figure path and a metadata struct summarising the
-%   contents of each subplot.
+function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha, customTitle)
+%PLOT_CLUSTER_DISTRIBUTION Visualizes the cluster permutation histogram.
+%   Targeted for Brainstorm structures where distribution is inside 'StatClusters'.
 %
-%   ALPHA defaults to 0.05 when omitted.
-%
-%   This helper operates on STATMAT structures saved by Brainstorm's FieldTrip
-%   integration (ft_timelockstatistics / ft_sourcestatistics).
-%
-%   Example:
-%       [fig, info] = plot_cluster_distribution(statFile, outputDir, 0.05);
-%
-%   See also: summarize_cluster_anatomy
-
-    if nargin < 3 || isempty(alpha)
-        alpha = 0.05;
-    end
-    if nargin < 2 || isempty(outputDir)
-        outputDir = pwd;
-    end
+%   Usage:
+%       plot_cluster_distribution(file, dir, 0.05)              -> Auto title (filename)
+%       plot_cluster_distribution(file, dir, 0.05, 'My Plot')   -> Custom title
 
     figPath = '';
-    metadata = struct('pos', [], 'neg', []);
+    figMeta = struct();
 
-    StatMat = load_statmat(statFullPath);
-    if isempty(StatMat) || ~isfield(StatMat, 'StatClusters') || isempty(StatMat.StatClusters)
-        return;
-    end
-    sc = StatMat.StatClusters;
-
-    if ~exist(outputDir, 'dir')
-        mkdir(outputDir);
-    end
-
-    [~, baseName, ~] = fileparts(statFullPath);
-    figPath = fullfile(outputDir, [baseName '_cluster_distribution.png']);
-
-    fh = figure('Visible', 'off', 'Color', 'w', 'Position', [100, 100, 1200, 700]);
-
-    metadata.pos = render_distribution_subplot(fh, 1, sc, 'pos', alpha);
-    metadata.neg = render_distribution_subplot(fh, 2, sc, 'neg', alpha);
-
-    mainTitle = 'Cluster permutation distributions';
-    if isfield(StatMat, 'Comment') && ~isempty(StatMat.Comment)
-        mainTitle = sprintf('%s: %s', mainTitle, StatMat.Comment);
-    end
-    if exist('sgtitle', 'builtin') || exist('sgtitle', 'file')
-        sgtitle(mainTitle, 'Interpreter', 'none');
+    % --- 0. Handle Title Logic ---
+    if nargin < 4 || isempty(customTitle)
+        % Default: Use filename if no custom title provided
+        [~, fNameRaw, ~] = fileparts(statFile);
+        plotTitle = sprintf('Cluster Permutation: %s', strrep(fNameRaw, '_', '\_'));
     else
-        annotation(fh, 'textbox', [0 0.95 1 0.05], 'String', mainTitle, ...
-            'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
-            'EdgeColor', 'none', 'FontWeight', 'bold', 'Interpreter', 'none');
+        % Use the custom string provided by the user
+        plotTitle = customTitle;
     end
 
-    try
-        saveas(fh, figPath);
-    catch ME %#ok<NASGU>
-        warning('plot_cluster_distribution:SaveFailed', ...
-            'Failed to save figure to %s', figPath);
-    end
-    close(fh);
-end
-
-
-function metadata = render_distribution_subplot(figHandle, subplotIndex, sc, polarity, alpha)
-    metadata = struct('distribution', [], 'observed', [], 'pValues', [], ...
-                      'significantIdx', [], 'clusterIndices', []);
-    ax = subplot(2, 1, subplotIndex, 'Parent', figHandle);
-    hold(ax, 'on');
-
-    distField = [polarity 'distribution'];
-    clusterField = [polarity 'clusters'];
-
-    dist = [];
-    if isfield(sc, distField)
-        dist = sc.(distField);
-    end
-    if ~isempty(dist)
-        histogram(ax, dist(:), 'FaceColor', [0.3 0.55 0.9], 'EdgeColor', [0.2 0.2 0.2]);
-        metadata.distribution = dist(:)';
-    end
-
-    clusters = [];
-    if isfield(sc, clusterField)
-        clusters = sc.(clusterField);
-    end
-
-    yl = [0 1];
-    if ~isempty(dist)
-        yl = get(ax, 'YLim');
-        if yl(2) == 0
-            yl(2) = 1;
-        end
-    end
-
-    if ~isempty(clusters)
-        observedStats = arrayfun(@(c) get_field(c, 'clusterstat', NaN), clusters);
-        pvals = arrayfun(@(c) get_field(c, 'prob', NaN), clusters);
-        metadata.observed = observedStats;
-        metadata.pValues = pvals;
-        metadata.clusterIndices = 1:numel(clusters);
-        metadata.significantIdx = find(pvals <= alpha);
-
-        for i = 1:numel(observedStats)
-            val = observedStats(i);
-            if isnan(val)
-                continue;
-            end
-            if pvals(i) <= alpha
-                color = [0.0 0.6 0.2];
-            else
-                color = [0.5 0.5 0.5];
-            end
-            line(ax, [val val], [yl(1) yl(2) * 0.95], 'Color', color, 'LineWidth', 2);
-        end
-    end
-
-    xlabel(ax, sprintf('%s cluster statistic', capitalize(polarity)));
-    ylabel(ax, 'Count');
-    title(ax, sprintf('%s clusters (\alpha = %.3f)', capitalize(polarity), alpha), 'Interpreter', 'none');
-    grid(ax, 'on');
-    hold(ax, 'off');
-end
-
-
-function StatMat = load_statmat(statFullPath)
-    StatMat = [];
-    if nargin < 1 || isempty(statFullPath) || ~exist(statFullPath, 'file')
-        warning('plot_cluster_distribution:MissingFile', 'Statistic file not found: %s', statFullPath);
+    % --- 1. Load Data ---
+    if ~exist(statFile, 'file')
+        warning('File not found: %s', statFile);
         return;
     end
-    try
-        data = load(statFullPath);
-        if isfield(data, 'StatMat')
-            StatMat = data.StatMat;
-            return;
-        end
-        fields = fieldnames(data);
-        for i = 1:numel(fields)
-            if isstruct(data.(fields{i}))
-                StatMat = data.(fields{i});
-                return;
-            end
-        end
-        warning('plot_cluster_distribution:InvalidFile', ...
-            'Unrecognised stat file format for %s', statFullPath);
-    catch ME
-        warning('plot_cluster_distribution:LoadFailed', ...
-            'Failed to load statistic file %s: %s', statFullPath, ME.message);
-    end
-end
+    data = load(statFile);
 
+    % --- 2. Extract Data (Targeting 'StatClusters') ---
+    perm_dist = [];
+    obs_stats = [];
+    obs_pvals = [];
+    statType = 'Cluster Statistic';
 
-function value = get_field(structure, fieldName, defaultValue)
-    if isstruct(structure) && isfield(structure, fieldName) && ~isempty(structure.(fieldName))
-        value = structure.(fieldName);
+    % Check if StatClusters exists
+    if isfield(data, 'StatClusters')
+        sc = data.StatClusters;
+        
+        % Get Distribution
+        if isfield(sc, 'posdistribution')
+            perm_dist = sc.posdistribution;
+        end
+        
+        % Get Observed Clusters
+        if isfield(sc, 'posclusters') && ~isempty(sc.posclusters)
+            obs_stats = [sc.posclusters.clusterstat];
+            obs_pvals = [sc.posclusters.prob];
+        end
     else
-        value = defaultValue;
-    end
-end
-
-
-function str = capitalize(str)
-    if isempty(str)
+        warning('StatClusters structure not found in file.');
         return;
     end
-    str = lower(str);
-    str(1) = upper(str(1));
+
+    if isempty(perm_dist)
+        warning('No permutation distribution found (StatClusters.posdistribution is empty).');
+        return;
+    end
+
+    % Get Method Name (maxsum/maxsize) for label
+    if isfield(data, 'Options') && isfield(data.Options, 'ClusterStatistic')
+        statType = data.Options.ClusterStatistic; 
+    end
+
+    % --- 3. Prepare Plot ---
+    hFig = figure('Visible', 'off', 'Color', 'w', 'Position', [100, 100, 1000, 600]);
+    hold on;
+
+    % A. Histogram of Null Distribution
+    hHist = histogram(perm_dist, 50, 'Normalization', 'pdf', ...
+                      'FaceColor', [0.8 0.8 0.8], 'EdgeColor', 'none', ...
+                      'DisplayName', 'Null Distribution');
+    
+    % B. Critical Threshold (95th percentile)
+    cutoff_val = prctile(perm_dist, (1 - alpha) * 100);
+    
+    % Determine Y-axis height
+    maxY = max(hHist.Values);
+    if maxY == 0, maxY = 1; end
+    maxY = maxY * 1.2; % Add headroom
+    ylim([0, maxY]);
+
+    % C. Threshold Line
+    xline(cutoff_val, '--k', sprintf('Critical Cutoff (%.1f)', cutoff_val), ...
+          'LineWidth', 2, 'LabelVerticalAlignment', 'top', ...
+          'DisplayName', 'Alpha Threshold');
+
+    % --- 4. Plot Observed Clusters ---
+    hasSig = false;
+    hasNonSig = false;
+
+    for i = 1:length(obs_stats)
+        val = obs_stats(i);
+        p   = obs_pvals(i);
+
+        if p < alpha
+            % SIGNIFICANT: Red Line + Marker
+            xline(val, 'Color', [0.85, 0.33, 0.1], 'LineWidth', 2);
+            plot(val, maxY * 0.5, 'v', 'MarkerSize', 10, ...
+                 'MarkerFaceColor', [0.85, 0.33, 0.1], 'MarkerEdgeColor', 'none', ...
+                 'HandleVisibility', 'off');
+            
+            text(val, maxY * 0.55, sprintf('Sig: %.1f\n(p=%.3f)', val, p), ...
+                 'Color', [0.85, 0.33, 0.1], 'FontSize', 9, 'FontWeight', 'bold', ...
+                 'HorizontalAlignment', 'center');
+            hasSig = true;
+        else
+            % NON-SIGNIFICANT: Faint Blue
+            xline(val, 'Color', [0, 0.45, 0.74], 'LineWidth', 1, 'LineStyle', ':', ...
+                  'Alpha', 0.5, 'HandleVisibility', 'off');
+            hasNonSig = true;
+        end
+    end
+
+    % --- 5. Fix X-Axis Scale ---
+    currentX = xlim;
+    maxObs = max([obs_stats, 0]);
+    newMaxX = max(currentX(2), maxObs * 1.05);
+    xlim([min(perm_dist), newMaxX]);
+
+    % --- 6. Aesthetics & Save ---
+    xlabel(sprintf('%s Value', statType));
+    ylabel('Probability Density');
+    
+    % Apply the custom or default title
+    % Interpreter 'none' ensures underscores (_) don't turn into subscripts
+    title(plotTitle, 'Interpreter', 'none', 'FontSize', 12, 'FontWeight', 'bold');
+    
+    % Legend Logic
+    legendItems = [hHist];
+    legendLabels = {'Null Distribution'};
+    
+    if hasSig
+        hSig = plot(nan, nan, 'Color', [0.85, 0.33, 0.1], 'LineWidth', 2);
+        legendItems(end+1) = hSig; 
+        legendLabels{end+1} = 'Significant Cluster';
+    end
+    if hasNonSig
+        hNon = plot(nan, nan, 'Color', [0, 0.45, 0.74], 'LineStyle', ':', 'LineWidth', 1);
+        legendItems(end+1) = hNon; 
+        legendLabels{end+1} = 'Non-Sig Cluster';
+    end
+    
+    legend(legendItems, legendLabels, 'Location', 'best');
+    grid on; box on;
+
+    % Save
+    [~, fNameBase, ~] = fileparts(statFile);
+    figPath = fullfile(outDir, [fNameBase, '_distribution.png']);
+    saveas(hFig, figPath);
+    close(hFig);
+
+    % Metadata
+    figMeta.alpha = alpha;
+    figMeta.cutoff = cutoff_val;
+    figMeta.nPerms = length(perm_dist);
+    figMeta.maxObs = maxObs;
+    figMeta.nSig = sum(obs_pvals < alpha);
 end
