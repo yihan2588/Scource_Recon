@@ -65,8 +65,3 @@ Perform group-level comparisons (Active vs. SHAM) using cluster permutation test
         - `*_cluster_distribution.png`: Plots of significant clusters.
         - `*_cluster_summary.txt`: Readable summary of significant regions.
         - `*_cluster_summary.mat/json`: Full statistical results.
-
-## Troubleshooting
-- **Missing Protocol**: If `group_analysis` finds no protocol, run `main` first.
-- **Directory Errors**: Ensure your `EEG_data` and `Structural` folders strictly match the hierarchy above.
-- **Bad Channels**: Use standard formats (e.g., `E123`) in the lookup JSON.
