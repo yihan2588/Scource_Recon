@@ -302,23 +302,23 @@ function group_analysis(opts)
 
     % --- User Configuration for Statistics ---
     if automatedMode
-        clusterStatisticOption = 2;   % Default for automated mode
+        clusterStatisticOption = 1;   % Default for automated mode
         nRandUser = -1;  % -1 means use automatic calculation
-        addLog('Cluster statistic method defaulted to maxsize (2) for automated run.');
+        addLog('Cluster statistic method defaulted to maxsum (1) for automated run.');
         addLog('Number of randomizations will be calculated automatically based on subjects.');
     else
         disp(' ');
         disp('=== Cluster Statistic Configuration ===');
         disp('Select cluster statistic method:');
-        disp('1: maxsum (sum of t-values in cluster)');
-        disp('2: maxsize (count of significant samples) - Default');
+        disp('1: maxsum (sum of t-values in cluster) - Default');
+        disp('2: maxsize (count of significant samples)');
         disp('3: wcm (weighted cluster mass)');
         
         clusterStatisticOption = -1;
         while ~ismember(clusterStatisticOption, [1, 2, 3])
             try
-                choiceStr = input('Enter your choice (1-3) [2]: ', 's');
-                if isempty(choiceStr), choiceStr = '2'; end
+                choiceStr = input('Enter your choice (1-3) [1]: ', 's');
+                if isempty(choiceStr), choiceStr = '1'; end
                 clusterStatisticOption = str2double(choiceStr);
                 if ~ismember(clusterStatisticOption, [1, 2, 3])
                     disp('Invalid choice. Please enter 1, 2, or 3.');
