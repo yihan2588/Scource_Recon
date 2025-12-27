@@ -353,7 +353,8 @@ function stat_test()
                         statFilesGenerated = {statsResult.FileName};
                         
                         % Generate outputs
-                        outputs = build_group_analysis_outputs(statFilesGenerated, runOutputDir, clusterAlpha);
+                        contextLabel = sprintf('%s %s (%s)', currentGroup, pair.name, nightName);
+                        outputs = build_group_analysis_outputs(statFilesGenerated, runOutputDir, clusterAlpha, contextLabel);
                         if ~isempty(outputs)
                             for iOut = 1:numel(outputs)
                                 logSummary = sprintf('         Plot: %s | Summary JSON: %s | TXT: %s', ...

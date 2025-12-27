@@ -89,7 +89,7 @@ function outputs = build_group_analysis_outputs(statFiles, outputRoot, alpha, co
                                             'timestamp', timestamp, 'outputDir', statOutDir));
 
         try
-            [figPath, figMeta] = plot_cluster_distribution(statFullPath, statOutDir, alpha);
+            [figPath, figMeta] = plot_cluster_distribution(statFullPath, statOutDir, alpha, contextLabel);
             outEntry.distributionFigure = figPath;
             outEntry.metadata.plot = figMeta;
         catch ME

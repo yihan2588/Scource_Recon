@@ -9,12 +9,12 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
     figPath = '';
     figMeta = struct();
 
-    % --- 0. Handle Title Logic ---
+    % --- 0. Handle Title Base ---
     if nargin < 4 || isempty(customTitle)
         [~, fNameRaw, ~] = fileparts(statFile);
-        plotTitle = sprintf('Cluster Permutation: %s', strrep(fNameRaw, '_', '\_'));
+        baseTitle = strrep(fNameRaw, '_', ' '); % Clean underscores
     else
-        plotTitle = customTitle;
+        baseTitle = strrep(customTitle, '_', ' ');
     end
     
     % Ensure output dir is absolute
@@ -118,7 +118,10 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
     ylabel('Count', 'FontSize', 14, 'FontWeight', 'bold');
     set(gca, 'FontSize', 12, 'LineWidth', 1.5);
     
-    title(plotTitle, 'Interpreter', 'none', 'FontSize', 16, 'FontWeight', 'bold');
+    % Construct Final Title: "Comparison, Method, perm = N"
+    nPerms = length(perm_dist);
+    finalTitle = sprintf('%s, %s, perm = %d', baseTitle, statType, nPerms);
+    title(finalTitle, 'Interpreter', 'none', 'FontSize', 16, 'FontWeight', 'bold');
     
     % Legend Logic
     legendItems = [hHist];
