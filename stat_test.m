@@ -18,6 +18,9 @@ function stat_test()
     if isempty(strengthenDir) || ~exist(strengthenDir, 'dir')
         error('STRENGTHEN directory not found or invalid. Exiting.');
     end
+    % Force absolute
+    if exist('file_fullpath', 'file'), strengthenDir = file_fullpath(strengthenDir);
+    elseif isjava(java.io.File(strengthenDir)), strengthenDir = char(java.io.File(strengthenDir).getAbsolutePath()); end
 
     scriptDir = fileparts(mfilename('fullpath'));
     addpath(scriptDir);

@@ -11,12 +11,17 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
 
     % --- 0. Handle Title Logic ---
     if nargin < 4 || isempty(customTitle)
-        % Default: Use filename if no custom title provided
         [~, fNameRaw, ~] = fileparts(statFile);
         plotTitle = sprintf('Cluster Permutation: %s', strrep(fNameRaw, '_', '\_'));
     else
-        % Use the custom string provided by the user
         plotTitle = customTitle;
+    end
+    
+    % Ensure output dir is absolute
+    if exist('file_fullpath', 'file')
+         outDir = file_fullpath(outDir);
+    elseif isjava(java.io.File(outDir))
+         outDir = char(java.io.File(outDir).getAbsolutePath());
     end
 
     % --- 1. Load Data ---
@@ -32,16 +37,11 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
     obs_pvals = [];
     statType = 'Cluster Statistic';
 
-    % Check if StatClusters exists
     if isfield(data, 'StatClusters')
         sc = data.StatClusters;
-        
-        % Get Distribution
         if isfield(sc, 'posdistribution')
             perm_dist = sc.posdistribution;
         end
-        
-        % Get Observed Clusters
         if isfield(sc, 'posclusters') && ~isempty(sc.posclusters)
             obs_stats = [sc.posclusters.clusterstat];
             obs_pvals = [sc.posclusters.prob];
@@ -56,7 +56,6 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
         return;
     end
 
-    % Get Method Name (maxsum/maxsize) for label
     if isfield(data, 'Options') && isfield(data.Options, 'ClusterStatistic')
         statType = data.Options.ClusterStatistic; 
     end
@@ -65,28 +64,29 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
     hFig = figure('Visible', 'off', 'Color', 'w', 'Position', [100, 100, 1000, 600]);
     hold on;
 
-    % A. Histogram of Null Distribution
-    hHist = histogram(perm_dist, 50, 'Normalization', 'pdf', ...
+    % A. Histogram of Null Distribution (COUNTS)
+    hHist = histogram(perm_dist, 50, 'Normalization', 'count', ...
                       'FaceColor', [0.8 0.8 0.8], 'EdgeColor', 'none', ...
                       'DisplayName', 'Null Distribution');
     
-    % B. Critical Threshold (95th percentile)
-    cutoff_val = prctile(perm_dist, (1 - alpha) * 100);
-    
-    % Determine Y-axis height
-    maxY = max(hHist.Values);
+    % Get counts for Y-axis scaling
+    histValues = hHist.Values;
+    maxY = max(histValues);
     if maxY == 0, maxY = 1; end
     maxY = maxY * 1.2; % Add headroom
     ylim([0, maxY]);
 
+    % B. Critical Threshold (95th percentile)
+    cutoff_val = prctile(perm_dist, (1 - alpha) * 100);
+    
     % C. Threshold Line
     xline(cutoff_val, '--k', sprintf('Critical Cutoff (%.1f)', cutoff_val), ...
           'LineWidth', 2, 'LabelVerticalAlignment', 'top', ...
-          'DisplayName', 'Alpha Threshold');
+          'DisplayName', 'Alpha Threshold', ...
+          'FontSize', 12, 'FontWeight', 'bold');
 
     % --- 4. Plot Observed Clusters ---
     hasSig = false;
-    hasNonSig = false;
 
     for i = 1:length(obs_stats)
         val = obs_stats(i);
@@ -100,15 +100,11 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
                  'HandleVisibility', 'off');
             
             text(val, maxY * 0.55, sprintf('Sig: %.1f\n(p=%.3f)', val, p), ...
-                 'Color', [0.85, 0.33, 0.1], 'FontSize', 9, 'FontWeight', 'bold', ...
+                 'Color', [0.85, 0.33, 0.1], 'FontSize', 11, 'FontWeight', 'bold', ...
                  'HorizontalAlignment', 'center');
             hasSig = true;
-        else
-            % NON-SIGNIFICANT: Faint Blue
-            xline(val, 'Color', [0, 0.45, 0.74], 'LineWidth', 1, 'LineStyle', ':', ...
-                  'Alpha', 0.5, 'HandleVisibility', 'off');
-            hasNonSig = true;
         end
+        % Non-significant clusters are now ignored
     end
 
     % --- 5. Fix X-Axis Scale ---
@@ -118,12 +114,11 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
     xlim([min(perm_dist), newMaxX]);
 
     % --- 6. Aesthetics & Save ---
-    xlabel(sprintf('%s Value', statType));
-    ylabel('Probability Density');
+    xlabel(sprintf('%s Value', statType), 'FontSize', 14, 'FontWeight', 'bold');
+    ylabel('Count', 'FontSize', 14, 'FontWeight', 'bold');
+    set(gca, 'FontSize', 12, 'LineWidth', 1.5);
     
-    % Apply the custom or default title
-    % Interpreter 'none' ensures underscores (_) don't turn into subscripts
-    title(plotTitle, 'Interpreter', 'none', 'FontSize', 12, 'FontWeight', 'bold');
+    title(plotTitle, 'Interpreter', 'none', 'FontSize', 16, 'FontWeight', 'bold');
     
     % Legend Logic
     legendItems = [hHist];
@@ -134,13 +129,8 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
         legendItems(end+1) = hSig; 
         legendLabels{end+1} = 'Significant Cluster';
     end
-    if hasNonSig
-        hNon = plot(nan, nan, 'Color', [0, 0.45, 0.74], 'LineStyle', ':', 'LineWidth', 1);
-        legendItems(end+1) = hNon; 
-        legendLabels{end+1} = 'Non-Sig Cluster';
-    end
     
-    legend(legendItems, legendLabels, 'Location', 'best');
+    legend(legendItems, legendLabels, 'Location', 'best', 'FontSize', 12);
     grid on; box on;
 
     % Save

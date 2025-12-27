@@ -16,8 +16,8 @@ function outputs = build_group_analysis_outputs(statFiles, outputRoot, alpha, co
 %       - metadata            : Struct containing plot + summary metadata
 %       - context             : Struct describing label/timestamps used
 %
-%   This helper depends on ft_cluster_helpers (plot_cluster_distribution,
-%   summarize_cluster_anatomy).
+    %   This helper depends on plot_cluster_distribution and summarize_cluster_anatomy.
+%   (Previously used ft_cluster_helpers wrapper, now calls directly)
 
     if nargin < 4
         contextLabel = '';
@@ -28,6 +28,14 @@ function outputs = build_group_analysis_outputs(statFiles, outputRoot, alpha, co
     if nargin < 2 || isempty(outputRoot)
         outputRoot = pwd;
     end
+    
+    % Force outputRoot to be absolute
+    if exist('file_fullpath', 'file')
+         outputRoot = file_fullpath(outputRoot);
+    elseif isjava(java.io.File(outputRoot))
+         outputRoot = char(java.io.File(outputRoot).getAbsolutePath());
+    end
+
     if nargin < 1 || isempty(statFiles)
         outputs = struct('statFile', {}, 'distributionFigure', {}, 'summaryJson', {}, ...
                          'summaryMat', {}, 'summaryTxt', {}, 'metadata', {}, 'context', {});
@@ -37,8 +45,6 @@ function outputs = build_group_analysis_outputs(statFiles, outputRoot, alpha, co
     if ischar(statFiles) || isstring(statFiles)
         statFiles = cellstr(statFiles);
     end
-
-    ensure_helpers_on_path();
 
     if isnumeric(contextLabel) || islogical(contextLabel)
         contextLabel = string(contextLabel);
@@ -104,16 +110,6 @@ function outputs = build_group_analysis_outputs(statFiles, outputRoot, alpha, co
         end
 
         outputs(end + 1) = outEntry; %#ok<AGROW>
-    end
-end
-
-function ensure_helpers_on_path()
-    % No longer needed; kept for backward compatibility.
-    helperFunctions = {'plot_cluster_distribution', 'summarize_cluster_anatomy'};
-    missing = helperFunctions(~cellfun(@(fn) (exist(fn, 'file') == 2), helperFunctions));
-    if ~isempty(missing)
-        error('build_group_analysis_outputs:MissingHelpers', ...
-            'Required helper functions are not available on the MATLAB path: %s', strjoin(missing, ', '));
     end
 end
 

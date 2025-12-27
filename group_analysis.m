@@ -59,6 +59,9 @@ function group_analysis(opts)
         if ~exist(strengthenDir, 'dir')
             error('group_analysis:InvalidStrengthenDir', 'Provided STRENGTHEN directory not found: %s', strengthenDir);
         end
+        % Force absolute
+        if exist('file_fullpath', 'file'), strengthenDir = file_fullpath(strengthenDir);
+        elseif isjava(java.io.File(strengthenDir)), strengthenDir = char(java.io.File(strengthenDir).getAbsolutePath()); end
     else
         strengthenDir = '';
         while isempty(strengthenDir) || ~exist(strengthenDir, 'dir')
@@ -67,6 +70,10 @@ function group_analysis(opts)
                 disp('STRENGTHEN directory path cannot be empty.');
             elseif ~exist(strengthenDir, 'dir')
                 disp(['STRENGTHEN directory not found: ', strengthenDir]);
+            else
+                % Force absolute
+                if exist('file_fullpath', 'file'), strengthenDir = file_fullpath(strengthenDir);
+                elseif isjava(java.io.File(strengthenDir)), strengthenDir = char(java.io.File(strengthenDir).getAbsolutePath()); end
             end
         end
     end
