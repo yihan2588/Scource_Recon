@@ -18,9 +18,12 @@ function stat_test()
     if isempty(strengthenDir) || ~exist(strengthenDir, 'dir')
         error('STRENGTHEN directory not found or invalid. Exiting.');
     end
-    % Force absolute
-    if exist('file_fullpath', 'file'), strengthenDir = file_fullpath(strengthenDir);
-    elseif isjava(java.io.File(strengthenDir)), strengthenDir = char(java.io.File(strengthenDir).getAbsolutePath()); end
+    % Force absolute path using Java (more robust for folders)
+    if isjava(java.io.File(strengthenDir))
+        strengthenDir = char(java.io.File(strengthenDir).getAbsolutePath());
+    elseif ~startsWith(strengthenDir, filesep) && ~contains(strengthenDir, ':') % Relative path
+        strengthenDir = fullfile(pwd, strengthenDir);
+    end
 
     scriptDir = fileparts(mfilename('fullpath'));
     addpath(scriptDir);

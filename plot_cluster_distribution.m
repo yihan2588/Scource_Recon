@@ -18,10 +18,10 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
     end
     
     % Ensure output dir is absolute
-    if exist('file_fullpath', 'file')
-         outDir = file_fullpath(outDir);
-    elseif isjava(java.io.File(outDir))
+    if isjava(java.io.File(outDir))
          outDir = char(java.io.File(outDir).getAbsolutePath());
+    elseif ~startsWith(outDir, filesep) && ~contains(outDir, ':')
+         outDir = fullfile(pwd, outDir);
     end
 
     % --- 1. Load Data ---

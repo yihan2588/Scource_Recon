@@ -30,10 +30,10 @@ function outputs = build_group_analysis_outputs(statFiles, outputRoot, alpha, co
     end
     
     % Force outputRoot to be absolute
-    if exist('file_fullpath', 'file')
-         outputRoot = file_fullpath(outputRoot);
-    elseif isjava(java.io.File(outputRoot))
+    if isjava(java.io.File(outputRoot))
          outputRoot = char(java.io.File(outputRoot).getAbsolutePath());
+    elseif ~startsWith(outputRoot, filesep) && ~contains(outputRoot, ':')
+         outputRoot = fullfile(pwd, outputRoot);
     end
 
     if nargin < 1 || isempty(statFiles)

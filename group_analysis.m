@@ -60,8 +60,11 @@ function group_analysis(opts)
             error('group_analysis:InvalidStrengthenDir', 'Provided STRENGTHEN directory not found: %s', strengthenDir);
         end
         % Force absolute
-        if exist('file_fullpath', 'file'), strengthenDir = file_fullpath(strengthenDir);
-        elseif isjava(java.io.File(strengthenDir)), strengthenDir = char(java.io.File(strengthenDir).getAbsolutePath()); end
+        if isjava(java.io.File(strengthenDir))
+             strengthenDir = char(java.io.File(strengthenDir).getAbsolutePath());
+        elseif ~startsWith(strengthenDir, filesep) && ~contains(strengthenDir, ':')
+             strengthenDir = fullfile(pwd, strengthenDir);
+        end
     else
         strengthenDir = '';
         while isempty(strengthenDir) || ~exist(strengthenDir, 'dir')
@@ -72,8 +75,11 @@ function group_analysis(opts)
                 disp(['STRENGTHEN directory not found: ', strengthenDir]);
             else
                 % Force absolute
-                if exist('file_fullpath', 'file'), strengthenDir = file_fullpath(strengthenDir);
-                elseif isjava(java.io.File(strengthenDir)), strengthenDir = char(java.io.File(strengthenDir).getAbsolutePath()); end
+                if isjava(java.io.File(strengthenDir))
+                     strengthenDir = char(java.io.File(strengthenDir).getAbsolutePath());
+                elseif ~startsWith(strengthenDir, filesep) && ~contains(strengthenDir, ':')
+                     strengthenDir = fullfile(pwd, strengthenDir);
+                end
             end
         end
     end
