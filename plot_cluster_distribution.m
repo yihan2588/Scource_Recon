@@ -88,6 +88,7 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
     % --- 4. Plot Observed Clusters ---
     hasSig = false;
 
+    % First pass: Check for significance and plot significant ones
     for i = 1:length(obs_stats)
         val = obs_stats(i);
         p   = obs_pvals(i);
@@ -104,7 +105,18 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
                  'HorizontalAlignment', 'center');
             hasSig = true;
         end
-        % Non-significant clusters are now ignored
+    end
+
+    % Second pass: If NO significant clusters, plot the largest insignificant one
+    hasTopInsignif = false;
+    if ~hasSig && ~isempty(obs_stats)
+        [maxVal, maxIdx] = max(obs_stats);
+        maxP = obs_pvals(maxIdx);
+        
+        xline(maxVal, 'Color', [0, 0.45, 0.74], 'LineWidth', 2, 'LineStyle', '--');
+        text(maxVal, maxY * 0.55, sprintf('Max: %.1f\n(p=%.3f)', maxVal, maxP), ...
+                 'Color', [0, 0.45, 0.74], 'FontSize', 11, 'HorizontalAlignment', 'center');
+        hasTopInsignif = true;
     end
 
     % --- 5. Fix X-Axis Scale ---
@@ -133,6 +145,12 @@ function [figPath, figMeta] = plot_cluster_distribution(statFile, outDir, alpha,
         legendLabels{end+1} = 'Significant Cluster';
     end
     
+    if exist('hasTopInsignif', 'var') && hasTopInsignif
+        hNon = plot(nan, nan, 'Color', [0, 0.45, 0.74], 'LineStyle', '--', 'LineWidth', 2);
+        legendItems(end+1) = hNon; 
+        legendLabels{end+1} = 'Largest Nonsig Cluster';
+    end
+
     legend(legendItems, legendLabels, 'Location', 'best', 'FontSize', 12);
     grid on; box on;
 
