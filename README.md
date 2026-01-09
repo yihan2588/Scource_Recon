@@ -24,7 +24,7 @@ STRENGTHEN/
 ### Required Assets (in this mapped `Assets/` folder)
 - `bad_channels_lookup.json`: List of bad channels (e.g., `["E001", "E055"]`).
 - `group_lookup.json`: Maps Subject IDs to groups (e.g., `Active` or `SHAM`).
-- `fiducials_lookup.json`: Subject-specific anatomical landmarks (NAS, LPA, RPA) for MRI registration.
+- `fiducials_lookup.json`: Subject-specific fiducials (NAS, LPA, RPA) for MRI registration.
 - `256_net_temp.xyz`: Channel location template.
 
 ---
